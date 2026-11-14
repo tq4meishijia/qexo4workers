@@ -66,7 +66,7 @@
 | 本地浏览器 UI | `npm run test:ui` | **13/13** |
 | 线上 API 冒烟 | `npm run test:prod` | **15/15，0 跳过** |
 | 线上浏览器 | `node test/prod-ui.mjs` | **7/7** |
-| 生产构建 | `npm run deploy:dry` | 470.86 KiB / gzip 100.11 KiB，启动约 7 ms |
+| 生产构建 | `npm run deploy:dry` | 470.85 KiB / gzip 100.11 KiB，启动约 7 ms |
 
 线上已配置真实 Fine-grained PAT 与博客仓库 `tq4meishijia/hexo`，密钥检测返回 11 个可访问仓库、4 个分支；内容索引读到 2 篇文章、18 个配置。详见 `docs/test-report.md` 第 8 节。
 
