@@ -1,17 +1,14 @@
-<div align="center">
-
 # 项目交接手册 · qexo4workers
 
 **Qexo → Cloudflare Workers 原生重写**
 
-</div>
-
 | 项 | 值 |
 |---|---|
+| 项目版本 | **1.0.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 在线实例 | <https://qexo-workers.tq4meishijia.workers.dev> |
-| 当前 Worker 版本 | `100dac5a-ebc4-4d8c-ad30-ebff8b5626de` |
+| 当前 Worker 版本 | `18f10728-f7ff-4d25-9eda-6b92876e0ffb` |
 | 云账号 | `tq4meishijia@gmail.com`（Account ID `92d3a579…`） |
 | 许可证 | GPL-3.0-or-later（上游 Qexo 衍生作品） |
 
@@ -59,6 +56,7 @@
 | S7 登录与默认账号 | ✅ 完成 | 自动建号、服务端 302 守卫、默认密码警示条 |
 | S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、默认留空语义 |
 | S9 文档与仓库化 | ✅ 完成 | README / handoff / 架构图 / 截图资源 / GitHub 仓库 |
+| S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 均为 `1.0.0` |
 
 ### 2.2 验收结果
 
@@ -199,8 +197,4 @@
 
 ---
 
-<div align="center">
-
-交接完成 · 正确性由本次交付的测试与线上冒烟结果担保
-
-</div>
+交接完成 · 项目版本 v1.0.0 · 正确性由本次交付的测试与线上冒烟结果担保

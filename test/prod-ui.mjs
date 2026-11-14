@@ -56,7 +56,9 @@ await step("登录并进入控制台", async () => {
   await page.waitForFunction(() => location.hash === "#/dashboard", null, { timeout: 20000 });
   await page.waitForSelector(".stat");
   const pill = await page.textContent("#provider-pill");
-  return pill.trim();
+  const version = (await page.textContent("#version")) || "";
+  if (!version.includes("1.0.0")) throw new Error(`unexpected UI version: ${version}`);
+  return `${pill.trim()} · ${version.trim()}`;
 });
 
 await step("控制台截图", async () => {

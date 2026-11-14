@@ -1,5 +1,3 @@
-<div align="center">
-
 # Qexo for Workers
 
 **把 Django 版 Qexo 重写为 Cloudflare Workers 原生博客管理后台**
@@ -10,11 +8,10 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-56%2F56-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://qexo-workers.tq4meishijia.workers.dev)
 
 **仓库**：<https://github.com/tq4meishijia/qexo4workers> ｜ **在线实例**：<https://qexo-workers.tq4meishijia.workers.dev>
-
-</div>
 
 ---
 
@@ -40,12 +37,13 @@
 
 | 项 | 值 |
 |---|---|
+| 项目版本 | **1.0.0**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
 | 内容源 | GitHub / GitLab / Gitea / R2；Hexo、Hugo、Valaxy、VuePress、VitePress、Nuxt、Astro 七套目录配置 |
 | 依赖 | 运行时 **0** 个 npm 包；构建期仅 `wrangler`、`typescript`、`esbuild`、`yaml` |
-| 代码规模 | 约 8.6 千行 TypeScript / JS / CSS；生产包 470.86 KiB（gzip 100.11 KiB） |
+| 代码规模 | 约 8.6 千行 TypeScript / JS / CSS；生产包 470.85 KiB（gzip 100.11 KiB） |
 
 ### 1.1 架构图
 
@@ -299,7 +297,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 浏览器 UI | `npm run test:ui` | **13/13** |
 | 线上 API 冒烟 | `npm run test:prod` | **15/15**（0 跳过） |
 | 线上浏览器 | `node test/prod-ui.mjs` | **7/7** |
-| 生产构建 | `npm run deploy:dry` | 470.86 KiB / gzip 100.11 KiB |
+| 生产构建 | `npm run deploy:dry` | 470.85 KiB / gzip 100.11 KiB |
 
 测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫、文章落盘与回滚、配置校验、图床、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
 
@@ -321,6 +319,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 7 | MCP 协议版本 | 以 2025-06-18 握手为基线，兼容 2025-03-26 / 2024-11-05；2026-07-28 的 `_meta` 新模型未实现 |
 | 8 | 默认空值语义 | 内容源表单的仓库与分支不预填任何值，空值保存会被前后端明确拦截，不会静默沿用旧配置 |
 | 9 | 免费额度 | 按日更 1–3 篇、日均 PV 5,000 估算余量 10 倍以上；瓶颈是 Pages 500 次构建/月，见 `docs/quota-analysis.md` |
+| 10 | 生产配置含资源 ID | `wrangler.prod.toml` 带当前账号的 D1 / KV 标识，fork 后请替换成自己的；该文件**不含任何凭据**，`SESSION_SECRET` 与 PAT 均不入库 |
 
 ---
 
@@ -345,8 +344,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-<div align="center">
-
-Made with TypeScript + Cloudflare Workers · 2026-11
-
-</div>
+Made with TypeScript + Cloudflare Workers · **v1.0.0** · 2026-11

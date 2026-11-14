@@ -133,6 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
+  assert.equal(me.data.version, "1.0.0", "runtime version mismatch");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
   return `session + csrf=${csrf.slice(0, 8)}…`;

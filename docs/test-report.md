@@ -129,17 +129,17 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 |---|---|
 | 账号 | `tq4meishijia@gmail.com`（Account ID `92d3a5791f6758d88fe1b81483f591ed`） |
 | Worker URL | <https://qexo-workers.tq4meishijia.workers.dev> |
-| Version ID | `100dac5a-ebc4-4d8c-ad30-ebff8b5626de` |
+| Version ID | `18f10728-f7ff-4d25-9eda-6b92876e0ffb` |
 | D1 | `qexo` / `e67e85cb-e28c-408a-b2cf-28e9f9839a47`（APAC） |
 | KV | `qexo-cache` / `e0892d23927d427e8ace479fa4682724` |
 | R2 | 账号未开通（API 10042），生产配置 `wrangler.prod.toml` 未绑定 R2 |
-| 构建 | 上传 470.86 KiB / gzip 100.11 KiB；启动 7 ms |
+| 构建 | 上传 470.85 KiB / gzip 100.11 KiB；启动 7 ms |
 | 会话密钥 | 未显式设置 `SESSION_SECRET`，应用首次登录时自动生成并存入 D1 `settings._SESSION_SECRET` |
 
 **结果：15/15 通过、0 跳过、0 失败**（`node test/prod-smoke.mjs`，报告 `test/out/prod-report.json`）。
-浏览器侧 **7/7 通过**（`node test/prod-ui.mjs`）：独立登录页、表单登录、控制台 4 张卡、内容源表单（Fine-grained PAT 链接/预填参数、仓库与分支默认留空、空值保存拦截、密钥状态）、MCP 页面、零 JS 错误；截图 `test/out/prod-dashboard.png`、`test/out/prod-settings.png`、`test/out/prod-mcp.png`。
+浏览器侧 **7/7 通过**（`node test/prod-ui.mjs`）：独立登录页、表单登录、控制台 4 张卡、内容源表单（Fine-grained PAT 链接/预填参数、仓库与分支默认留空、空值保存拦截、密钥状态）、UI 侧栏版本 `v1.0.0`、MCP 页面、零 JS 错误；截图 `test/out/prod-dashboard.png`、`test/out/prod-settings.png`、`test/out/prod-mcp.png`。
 
-通过项：页面守卫（未登录 `/` → 302 `/login`，登录后 `/` → 200）、初始化状态、登录 + CSRF、控制台聚合、内容索引与文章读取（真实仓库 2 篇文章、18 个配置）、内容源密钥检测（未登录 401；已配置密钥返回 11 个仓库）、友链写读删、说说写读删、统计 PV/UV、MCP 握手、MCP `tools/list` + `tools/call`（`qexo_overview`，18 个工具）、令牌吊销后 401。
+通过项：页面守卫（未登录 `/` → 302 `/login`，登录后 `/` → 200）、初始化状态、登录 + CSRF（含运行时版本 `1.0.0` 校验）、控制台聚合、内容索引与文章读取（真实仓库 2 篇文章、18 个配置）、内容源密钥检测（未登录 401；已配置密钥返回 11 个仓库）、友链写读删、说说写读删、统计 PV/UV、MCP 握手、MCP `tools/list` + `tools/call`（`qexo_overview`，18 个工具）、令牌吊销后 401。
 
 初始账号：`admin` / `admin123`（首次请求自动创建）；线上已用该密码登录验证，控制台显示默认密码警示条。
 
