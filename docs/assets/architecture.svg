@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="960" height="500" role="img" aria-label="Qexo for Workers 系统架构图">
+  <title>Qexo for Workers 系统架构</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 600 19px system-ui, "Noto Sans SC", sans-serif; fill: #0f172a; }
+      .sub { font: 12px system-ui, "Noto Sans SC", sans-serif; fill: #64748b; }
+      .col { font: 600 13px system-ui, "Noto Sans SC", sans-serif; fill: #475569; letter-spacing: .5px; }
+      .box { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; }
+      .box-blue { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.4; }
+      .box-green { fill: #f0fdf4; stroke: #86efac; stroke-width: 1.2; }
+      .box-amber { fill: #fffbeb; stroke: #fcd34d; stroke-width: 1.2; }
+      .h { font: 600 13px system-ui, "Noto Sans SC", sans-serif; fill: #0f172a; }
+      .t { font: 11.5px system-ui, "Noto Sans SC", sans-serif; fill: #475569; }
+      .edge { stroke: #64748b; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+      .edge-blue { stroke: #2563eb; stroke-width: 1.8; fill: none; marker-end: url(#arrow-blue); }
+      .edge-label { font: 10.5px system-ui, "Noto Sans SC", sans-serif; fill: #64748b; }
+      .note { font: 11px system-ui, "Noto Sans SC", sans-serif; fill: #475569; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="500" rx="10"/>
+
+  <text class="title" x="30" y="38">Qexo for Workers · 系统架构</text>
+  <text class="sub" x="30" y="58">Git 仓库是唯一内容源；D1 存索引与元数据；正文与图片不落在 Worker 进程内</text>
+
+  <text class="col" x="30" y="92">客户端</text>
+  <text class="col" x="300" y="92">Cloudflare Worker（单实例 / 零 npm 运行时依赖）</text>
+  <text class="col" x="690" y="92">数据与内容</text>
+
+  <!-- clients -->
+  <g>
+    <rect class="box" x="30" y="106" width="220" height="62" rx="9"/>
+    <text class="h" x="44" y="130">管理端 SPA</text>
+    <text class="t" x="44" y="150">原生 JS/CSS · 7 语言 · 独立 /login</text>
+
+    <rect class="box" x="30" y="186" width="220" height="62" rx="9"/>
+    <text class="h" x="44" y="210">博客主题前台</text>
+    <text class="t" x="44" y="230">/pub/* 兼容接口 + token 鉴权</text>
+
+    <rect class="box" x="30" y="266" width="220" height="62" rx="9"/>
+    <text class="h" x="44" y="290">AI Agent / WorkBuddy</text>
+    <text class="t" x="44" y="310">MCP Streamable HTTP · 18 工具</text>
+
+    <rect class="box-green" x="30" y="346" width="220" height="62" rx="9"/>
+    <text class="h" x="44" y="370">Static Assets</text>
+    <text class="t" x="44" y="390">HTML/CSS/JS 直出，不进 Worker</text>
+  </g>
+
+  <!-- worker -->
+  <g>
+    <rect class="box-blue" x="300" y="106" width="330" height="302" rx="12"/>
+    <text class="h" x="318" y="132">Worker Router</text>
+
+    <rect class="box" x="318" y="146" width="294" height="48" rx="7"/>
+    <text class="h" x="330" y="166">页面守卫</text>
+    <text class="t" x="330" y="184">未登录 302 → /login?next=…</text>
+
+    <rect class="box" x="318" y="202" width="294" height="48" rx="7"/>
+    <text class="h" x="330" y="222">鉴权与会话</text>
+    <text class="t" x="330" y="240">HMAC Cookie · CSRF · 限流 · PBKDF2</text>
+
+    <rect class="box" x="318" y="258" width="294" height="48" rx="7"/>
+    <text class="h" x="330" y="278">/api/* 管理接口 · /pub/* 兼容层</text>
+    <text class="t" x="330" y="296">文章 / 页面 / 配置 / 图床 / 友链 / 说说 / 统计</text>
+
+    <rect class="box" x="318" y="314" width="294" height="48" rx="7"/>
+    <text class="h" x="330" y="334">/mcp 服务端</text>
+    <text class="t" x="330" y="352">JSON-RPC · 令牌作用域 · 资源与提示词</text>
+
+    <rect class="box" x="318" y="370" width="294" height="26" rx="6"/>
+    <text class="t" x="330" y="388">内容源表单：PAT 检测 → 仓库/分支下拉（默认留空）</text>
+  </g>
+
+  <!-- data -->
+  <g>
+    <rect class="box" x="690" y="106" width="240" height="56" rx="9"/>
+    <text class="h" x="704" y="130">D1 · 14 张表</text>
+    <text class="t" x="704" y="148">用户 / 会话 / 设置 / 内容索引 / 统计</text>
+
+    <rect class="box" x="690" y="172" width="240" height="56" rx="9"/>
+    <text class="h" x="704" y="196">KV（可选）</text>
+    <text class="t" x="704" y="214">设置与 tree 快照缓存</text>
+
+    <rect class="box" x="690" y="238" width="240" height="56" rx="9"/>
+    <text class="h" x="704" y="262">R2（可选）</text>
+    <text class="t" x="704" y="280">图片对象 / 本地磁盘 Provider 替代</text>
+
+    <rect class="box-amber" x="690" y="304" width="240" height="56" rx="9"/>
+    <text class="h" x="704" y="328">Git Provider</text>
+    <text class="t" x="704" y="346">GitHub / GitLab / Gitea · Trees + Contents</text>
+
+    <rect class="box-green" x="690" y="370" width="240" height="56" rx="9"/>
+    <text class="h" x="704" y="394">Cloudflare Pages</text>
+    <text class="t" x="704" y="412">Git 集成 → 构建静态站点</text>
+  </g>
+
+  <!-- edges -->
+  <path class="edge-blue" d="M 250 137 L 296 137"/>
+  <path class="edge-blue" d="M 250 217 L 296 217"/>
+  <path class="edge-blue" d="M 250 297 L 296 297"/>
+  <path class="edge" d="M 630 134 L 686 134"/>
+  <path class="edge" d="M 630 200 L 686 200"/>
+  <path class="edge" d="M 630 266 L 686 266"/>
+  <path class="edge" d="M 630 322 L 686 332"/>
+  <path class="edge" d="M 810 360 L 810 366"/>
+  <path class="edge" d="M 930 398 C 946 398 946 460 470 460 L 140 460"/>
+  <text class="edge-label" x="256" y="128">HTTPS</text>
+  <text class="edge-label" x="636" y="126">binding</text>
+  <text class="edge-label" x="636" y="318">fetch</text>
+  <text class="edge-label" x="470" y="452">静态站点回灌到主题前台（/pub/* 读取索引）</text>
+
+  <text class="note" x="30" y="480">Workers Free：100,000 请求/天 · 10 ms CPU/请求 · 50 子请求/请求；静态资源与 API 分流后，日常使用远低于配额。</text>
+</svg>

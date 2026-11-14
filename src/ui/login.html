@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN" translate="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="same-origin" />
+  <title>登录 · Qexo</title>
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="auth">
+    <section class="auth-card">
+      <div class="auth-head">
+        <span class="brand-mark">Q</span>
+        <div>
+          <h2 id="site-name">Qexo</h2>
+          <p>登录以管理你的博客内容</p>
+        </div>
+      </div>
+
+      <div class="login-hint" id="default-hint" hidden>
+        初始账号 <code>admin</code> / <code>admin123</code>。登录后请立即在「账户」页修改密码。
+      </div>
+
+      <form id="login-form" autocomplete="on">
+        <label class="field"><span>用户名</span>
+          <input name="username" autocomplete="username" required autofocus />
+        </label>
+        <label class="field"><span>密码</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <div id="recaptcha-v2" class="mb"></div>
+        <div class="login-error" id="login-error" hidden></div>
+        <button class="btn primary" type="submit" id="login-btn">登录</button>
+      </form>
+
+      <div class="auth-foot">Qexo Workers Edition · <span id="version">—</span></div>
+    </section>
+  </main>
+  <script type="module" src="/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "qexo-workers"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Admin UI is served as static assets; only the API surfaces invoke the Worker.
+[assets]
+directory = "src/ui"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/", "/index.html", "/login", "/login.html", "/api/*", "/pub/*", "/webhook/*", "/mcp"]
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "qexo"
+database_id = "local-dev"
+migrations_dir = "migrations"
+
+# Optional: KV is only used as a cold-start settings cache. The Worker degrades
+# gracefully (D1-only) when the binding is absent.
+[[kv_namespaces]]
+binding = "KV"
+id = "local-dev"
+
+# Optional: R2 powers the native image host and the "r2" content provider.
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "qexo-images"
+
+[vars]
+# Public origin used for absolute image URLs, e.g. "https://qexo.example.com".
+PUBLIC_ORIGIN = ""
+# Override only for tests: point the VCS clients at a mock API server.
+# GITHUB_API_BASE = "http://127.0.0.1:8788"
