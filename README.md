@@ -47,7 +47,9 @@
 
 ### 1.1 架构图
 
-![Qexo for Workers 系统架构](docs/assets/architecture.svg)
+![Qexo for Workers 系统架构](docs/assets/architecture.png)
+
+可编辑矢量源文件：[docs/assets/architecture.svg](docs/assets/architecture.svg)
 
 ### 1.2 为什么这样设计
 
