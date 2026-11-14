@@ -1,6 +1,35 @@
-/* MCP integration: tokens, connection snippets, tool catalog. */
+/* MCP integration: tokens, connection snippets, agent onboarding prompt, tool catalog. */
 
-import { api, confirmDialog, copyText, esc, fmtDate, icon, openModal, route, setTitle, toast } from "./core.js";
+import { api, confirmDialog, esc, fmtDate, icon, openModal, route, setTitle, state, toast } from "./core.js";
+import { buildAgentPrompt, PROMPT_SECTIONS, PROMPT_SPEC } from "./mcp-prompt.js";
+
+const TOKEN_PLACEHOLDER = "<YOUR_TOKEN>";
+
+/** Clipboard API with a selection fallback, so copying works on non-secure origins too. */
+async function copyAny(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(label, "ok");
+    return true;
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    ta.remove();
+    toast(copied ? label : "复制失败，请手动选择文本", copied ? "ok" : "err");
+    return copied;
+  }
+}
 
 function snippet(endpoint, token) {
   return JSON.stringify(
@@ -9,7 +38,7 @@ function snippet(endpoint, token) {
         qexo: {
           type: "http",
           url: endpoint,
-          headers: { Authorization: `Bearer ${token || "<YOUR_TOKEN>"}` },
+          headers: { Authorization: `Bearer ${token || TOKEN_PLACEHOLDER}` },
         },
       },
     },
@@ -24,10 +53,10 @@ function stdioSnippet(endpoint, token) {
       mcpServers: {
         qexo: {
           command: "node",
-          args: ["<path-to>/mcp/stdio-bridge.mjs"],
+          args: ["<仓库根目录>/mcp/stdio-bridge.mjs"],
           env: {
             QEXO_MCP_URL: endpoint,
-            QEXO_MCP_TOKEN: token || "<YOUR_TOKEN>",
+            QEXO_MCP_TOKEN: token || TOKEN_PLACEHOLDER,
           },
         },
       },
@@ -64,11 +93,18 @@ async function renderMcp({ view }) {
       <div class="card">
         <div class="card-head"><h3>接入步骤</h3></div>
         <ol class="hint" style="line-height:1.9;padding-left:18px;margin:0">
-          <li>创建令牌并复制（仅显示一次）</li>
-          <li>把配置片段写入客户端的 MCP 配置</li>
-          <li>在客户端信任/启用该服务器</li>
-          <li>对 agent 说「列出我的博客文章」</li>
+          <li>创建令牌（明文仅显示一次）</li>
+          <li>复制自动生成的 Agent 配置提示词，直接发给任意 AI agent</li>
+          <li>agent 按提示词写入配置并信任 / 启用服务器</li>
+          <li>用提示词内的首条指令验证接入</li>
         </ol>
+        <details class="scope-help mt">
+          <summary>Agent 提示词结构规范（v${PROMPT_SPEC.version}）</summary>
+          <ul>
+            ${PROMPT_SECTIONS.map((s) => `<li>${esc(s)}</li>`).join("")}
+          </ul>
+          <p>${PROMPT_SPEC.rules.map(esc).join("；")}。必备要素：${PROMPT_SPEC.required.map(esc).join("、")}。</p>
+        </details>
       </div>
     </div>
 
@@ -157,7 +193,7 @@ async function renderMcp({ view }) {
       renderSnippet();
     };
   });
-  document.getElementById("copy-snippet").onclick = () => copyText(document.getElementById("snippet").textContent);
+  document.getElementById("copy-snippet").onclick = () => copyAny(document.getElementById("snippet").textContent, "已复制配置片段");
 
   document.getElementById("new-token").onclick = () => {
     openModal({
@@ -189,7 +225,15 @@ async function renderMcp({ view }) {
                 method: "POST",
                 body: { name: document.getElementById("t-name").value || "AI Agent", scopes },
               });
-              showToken(res.token, scopes);
+              const prompt = buildAgentPrompt({
+                token: res.token,
+                endpoint: data.endpoint,
+                scopes,
+                tools: data.tools,
+                protocols: data.protocols,
+                appVersion: state.settings?.version || "1.0.0",
+              });
+              showToken(res.token, scopes, prompt);
               const next = await api("/api/mcp");
               drawTokens(next.tokens);
               return false;
@@ -203,26 +247,47 @@ async function renderMcp({ view }) {
     });
   };
 
-  function showToken(token, scopes) {
+  function showToken(token, scopes, prompt) {
     openModal({
-      title: "令牌已创建",
-      body: `<p class="hint">仅显示这一次。复制后写入客户端配置。</p>
+      title: "令牌已创建 · Agent 配置提示词",
+      body: `<p class="hint">令牌与提示词仅显示这一次。推荐直接把下方提示词发给任意 AI agent，让它自行完成接入配置。</p>
         <label class="field"><span>Token</span>
           <input id="new-token-value" readonly value="${esc(token)}" class="mono" /></label>
-        <label class="field"><span>HTTP 配置</span>
-          <textarea id="new-token-config" rows="9" class="mono" readonly>${esc(snippet(endpoint, token))}</textarea></label>
-        <p class="hint">权限：${scopes.join(" / ")}</p>`,
+        <label class="field"><span>Agent 配置提示词（${PROMPT_SECTIONS.length} 段固定结构 · 纯 Markdown）</span>
+          <textarea id="new-agent-prompt" rows="14" class="mono" readonly>${esc(prompt)}</textarea>
+          <small>含令牌、端点、配置参数、${esc(String(data.tools.length))} 个工具、客户端适配规则、使用说明与安全约束；可原样粘贴给 WorkBuddy / Claude / Cursor 等任意 agent。</small>
+        </label>
+        <details class="scope-help">
+          <summary>单独查看 HTTP 配置片段</summary>
+          <textarea id="new-token-config" rows="9" class="mono" readonly>${esc(snippet(endpoint, token))}</textarea>
+        </details>
+        <p class="picker-status err mt"><span>提示词包含明文令牌，请勿粘贴到公开仓库、群聊或日志；权限：${scopes.join(" / ")}。</span></p>`,
       buttons: [
         {
-          label: "复制 Token",
-          cls: "ghost",
-          onClick: () => copyText(token),
+          label: "复制 Agent 配置提示词",
+          cls: "primary",
+          onClick: async () => {
+            await copyAny(prompt, "已复制 Agent 配置提示词");
+            return false;
+          },
         },
         {
-          label: "复制完整配置",
-          cls: "primary",
-          onClick: () => copyText(document.getElementById("new-token-config").value),
+          label: "复制 HTTP 配置",
+          cls: "ghost",
+          onClick: async () => {
+            await copyAny(snippet(endpoint, token), "已复制 HTTP 配置");
+            return false;
+          },
         },
+        {
+          label: "仅复制 Token",
+          cls: "ghost",
+          onClick: async () => {
+            await copyAny(token, "已复制 Token");
+            return false;
+          },
+        },
+        { label: "完成", cls: "ghost" },
       ],
     });
   }
@@ -238,8 +303,9 @@ async function renderMcp({ view }) {
   };
 
   document.getElementById("curl").onclick = () =>
-    copyText(
-      `curl -s ${endpoint} -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer <YOUR_TOKEN>" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`,
+    copyAny(
+      `curl -s ${endpoint} -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer ${TOKEN_PLACEHOLDER}" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`,
+      "已复制连通性测试命令",
     );
 }
 

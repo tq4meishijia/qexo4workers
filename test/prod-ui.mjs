@@ -150,6 +150,7 @@ await step("MCP 页面", async () => {
   await page.waitForSelector("#new-token");
   const text = await page.textContent("#view");
   if (!text.includes("Streamable HTTP")) throw new Error("MCP page content missing");
+  if (!text.includes("Agent 提示词结构规范")) throw new Error("agent prompt spec missing");
   await page.screenshot({ path: "test/out/prod-mcp.png", fullPage: true });
   return "endpoint + tools listed";
 });

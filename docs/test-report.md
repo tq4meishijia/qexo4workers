@@ -1,6 +1,6 @@
 # 验收测试报告
 
-**日期**：2026-11-14 ｜ **结论**：本地 API 56/56、浏览器 13/13；线上 API 15/15、浏览器 7/7。
+**日期**：2026-11-14 ｜ **结论**：本地 API 58/58、浏览器 13/13；线上 API 15/15、浏览器 7/7。
 
 ## 1. 测试环境
 
@@ -46,7 +46,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 
 脚本会重建 `test/out/repo`、清空 `test/.state`，保证可重复。
 
-## 4. API 用例（56 项，全部通过）
+## 4. API 用例（58 项，全部通过）
 
 | 分组 | 用例 |
 |---|---|
@@ -67,7 +67,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 | WebHook（1） | token 清缓存 |
 | 备份（1） | JSON 导出结构 |
 | 构建（3） | 生成静态站、标题取自配置、删除后消失 |
-| MCP（12） | 建只读令牌、initialize、initialized 202、tools/list、只读越权拒绝、get_post、resources、写令牌建稿落盘、更新 front-matter、stdio 桥接、401/-32601、令牌列表无明文 |
+| MCP（14） | 建只读令牌、initialize、initialized 202、tools/list、只读越权拒绝、get_post、resources、写令牌建稿落盘、更新 front-matter、stdio 桥接、401/-32601、令牌列表无明文、Agent 提示词 6 段结构与 11 项要素、只读令牌作用域标注 |
 | 配额（1） | 统计 Git 调用量 |
 
 关键断言举例：
@@ -91,7 +91,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 9. 仓库/分支需明确选择：加载选项后两项仍为空；选择仓库后分支加载但不自动选默认分支；手动选择后刷新列表保持所选值
 10. 无效密钥：token 状态与仓库状态同时显示红色错误，包含 GitHub 401 原因
 11. 图床页、友链页可访问
-12. MCP 页创建 write 令牌，返回 `qx_mcp_` 前缀
+12. MCP 页创建 write 令牌并自动生成 Agent 配置提示词：6 段结构、令牌出现两次、含 HTTP/stdio 适配与 18 个工具，复制按钮可用
 13. 控制台无 JS 运行时错误
 
 截图证据：
@@ -117,7 +117,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 
 ## 7. 性能与配额观测
 
-- 整轮 56 个 API 用例触发 **54 次** Git API 调用，均值约 1.0 次/用例；其中内容源探测占 11 次（检测密钥 3–4 次、读取分支 2 次），其余为内容读写与索引。
+- 整轮 58 个 API 用例触发 **54 次** Git API 调用，均值约 1.0 次/用例；其中内容源探测占 11 次（检测密钥 3–4 次、读取分支 2 次），其余为内容读写与索引。
 - 密钥检测结果在浏览器内存缓存 60 秒，切换设置标签页不会重复消耗 GitHub 配额。
 - 文章列表在 tree 缓存有效期内 **0 次** Git 调用（D1 直出）。
 - 页面 HTML/CSS/JS 由静态资源直接返回，不进入 Worker；`/api/*` 与 `/pub/*` 才消耗 Worker 请求。
@@ -129,7 +129,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 |---|---|
 | 账号 | `tq4meishijia@gmail.com`（Account ID `92d3a5791f6758d88fe1b81483f591ed`） |
 | Worker URL | <https://qexo-workers.tq4meishijia.workers.dev> |
-| Version ID | `18f10728-f7ff-4d25-9eda-6b92876e0ffb` |
+| Version ID | `6da1f4ae-5bac-4185-8207-8d37521eeded` |
 | D1 | `qexo` / `e67e85cb-e28c-408a-b2cf-28e9f9839a47`（APAC） |
 | KV | `qexo-cache` / `e0892d23927d427e8ace479fa4682724` |
 | R2 | 账号未开通（API 10042），生产配置 `wrangler.prod.toml` 未绑定 R2 |
@@ -137,11 +137,13 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 | 会话密钥 | 未显式设置 `SESSION_SECRET`，应用首次登录时自动生成并存入 D1 `settings._SESSION_SECRET` |
 
 **结果：15/15 通过、0 跳过、0 失败**（`node test/prod-smoke.mjs`，报告 `test/out/prod-report.json`）。
-浏览器侧 **7/7 通过**（`node test/prod-ui.mjs`）：独立登录页、表单登录、控制台 4 张卡、内容源表单（Fine-grained PAT 链接/预填参数、仓库与分支默认留空、空值保存拦截、密钥状态）、UI 侧栏版本 `v1.0.0`、MCP 页面、零 JS 错误；截图 `test/out/prod-dashboard.png`、`test/out/prod-settings.png`、`test/out/prod-mcp.png`。
+浏览器侧 **7/7 通过**（`node test/prod-ui.mjs`）：独立登录页、表单登录、控制台 4 张卡、内容源表单（Fine-grained PAT 链接/预填参数、仓库与分支默认留空、空值保存拦截、密钥状态）、UI 侧栏版本 `v1.0.0`、MCP 页 Agent 提示词结构规范、零 JS 错误；截图 `test/out/prod-dashboard.png`、`test/out/prod-settings.png`、`test/out/prod-mcp.png`。
 
 通过项：页面守卫（未登录 `/` → 302 `/login`，登录后 `/` → 200）、初始化状态、登录 + CSRF（含运行时版本 `1.0.0` 校验）、控制台聚合、内容索引与文章读取（真实仓库 2 篇文章、18 个配置）、内容源密钥检测（未登录 401；已配置密钥返回 11 个仓库）、友链写读删、说说写读删、统计 PV/UV、MCP 握手、MCP `tools/list` + `tools/call`（`qexo_overview`，18 个工具）、令牌吊销后 401。
 
 初始账号：`admin` / `admin123`（首次请求自动创建）；线上已用该密码登录验证，控制台显示默认密码警示条。
+
+线上静态资源校验：`/js/mcp-prompt.js`、`/js/mcp.js`、`/style.css` 均包含本次新增的提示词生成与样式规则。
 
 线上内容源状态：已配置真实 Fine-grained PAT，仓库 `tq4meishijia/hexo`、分支 `main`；密钥检测返回 11 个可访问仓库，分支列表 4 个。表单仍默认留空，已保存值以只读说明展示，保存前需重新选择。此前“缺 Token 跳过”的两项已转为正常执行。
 

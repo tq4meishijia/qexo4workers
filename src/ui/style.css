@@ -326,7 +326,10 @@ td.actions .btn { margin-left: 4px; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border-soft); }
 .modal-head h2 { font-size: 15px; }
 .modal-body { padding: 18px; max-height: 66vh; overflow: auto; }
-.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border-soft); background: var(--bg-2); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 14px 18px; border-top: 1px solid var(--border-soft); background: var(--bg-2); }
+/* The agent prompt is a long, self-contained document: give it room to read. */
+.modal:has(#new-agent-prompt) { max-width: 860px; }
+.modal:has(#new-agent-prompt) #new-agent-prompt { min-height: 260px; font-size: 12px; line-height: 1.6; }
 
 .toasts { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 80; }
 .toast {

@@ -80,6 +80,62 @@ curl -s https://qexo.example.com/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+### 3.4 Agent 配置提示词（一键接入）
+
+**生成时机**：在后台「MCP 接入」创建令牌成功的同时，由前端纯函数 `src/ui/js/mcp-prompt.js` 自动生成。因为服务端只存令牌的 SHA-256，明文与提示词都**只在创建弹窗中出现一次**，关闭后无法重新生成，需重建令牌。弹窗提供「复制 Agent 配置提示词」「复制 HTTP 配置」「仅复制 Token」三个按钮，复制逻辑带 `document.execCommand` 回退，非安全上下文也能使用。
+
+复制后可直接把整段文本发给任意 AI agent（WorkBuddy、Claude、Cursor 或其它支持 MCP 的助手），对方无需再追问任何信息即可完成接入。
+
+#### 内容要素
+
+| 要素 | 具体值 / 来源 |
+|---|---|
+| 令牌 | `qx_mcp_<64 hex>`，明文，仅在第 1 节表格与第 2 节配置块出现两次 |
+| 接入地址 | `/api/mcp` 返回的 `endpoint`（优先 `PUBLIC_ORIGIN`，否则请求域名） |
+| 传输与协议 | Streamable HTTP / JSON-RPC 2.0；`2025-06-18`，兼容 `2025-03-26`、`2024-11-05` |
+| 配置参数 | `mcpServers.qexo.type = http`、`url`、`headers.Authorization`、`headers.Accept` |
+| 客户端适配 | `servers` 键名替换、`transport: streamable-http`、stdio 桥接配置、纯 HTTP JSON-RPC 回退 |
+| 功能列表 | 18 个工具，按 `read` / `write` 分组，名称与描述来自 `/api/mcp` 的 `tools` |
+| 作用域说明 | 当前令牌 `read` / `read + write`；只读令牌明确写出 `Insufficient scope` 属预期 |
+| 使用说明 | 写入配置 → 信任/启用 → 首条验证指令 → 常用指令 → `delete_file` 必须 `confirm: true` |
+| 安全与排错 | 明文令牌保管、401/403/429 处理、连通性自测命令 |
+| 完成回执 | 要求 agent 回复「已连接 Qexo MCP，可用工具 N 个」 |
+
+#### 结构与格式规范（v1.0）
+
+提示词为**纯 Markdown、无 HTML**，固定 6 个二级标题，顺序不可调换：
+
+| # | 章节 | 承载内容 |
+|---|---|---|
+| 1 | 连接信息 | 表格 + 令牌 / 端点 / 协议 / 作用域 / 服务端版本 |
+| 2 | 标准配置（HTTP MCP，优先使用） | 可直接解析的 `json` 代码块 + 各客户端写入位置 |
+| 3 | 客户端适配规则 | 适配表格 + stdio `json` 回退 + 纯 HTTP `bash` 回退 |
+| 4 | 可用功能清单 | 只读/写入工具分组列表，含数量与描述 |
+| 5 | 使用说明 | 有序步骤、验证指令、写操作约束 |
+| 6 | 安全与排错 | 明文警告、错误码处理、连通性自测 |
+
+格式规则：
+
+1. 一级标题 1 个；二级标题 6 个，顺序与 `PROMPT_SECTIONS` 常量一致。
+2. 配置一律放在带语言标签的代码块（`json` / `bash`），保证可解析、可整段复制。
+3. 连接信息用表格，功能清单用分组列表，适配规则用表格；中文叙述 + 英文标识符原样保留。
+4. 令牌只出现在第 1 节与第 2 节；其它示例统一用 `$QEXO_MCP_TOKEN` 占位，由 agent 从提示词内部自行代入。
+5. 自包含：不引用外部文档、不要求用户补充信息；任何不适用的客户端都有第 3 节的回退方案。
+6. 末尾附生成规范说明与完成回执要求，便于 agent 确认接入结果。
+
+#### 适配不同 AI agent
+
+| 客户端 | 提示词中的对应方案 |
+|---|---|
+| WorkBuddy | 第 2 节配置写入 `~/.workbuddy/mcp.json`，再点「信任」 |
+| Claude Desktop / Cursor（新版 HTTP MCP） | 第 2 节配置写入各自 MCP 配置文件，重启或刷新 |
+| 配置键为 `servers` 的客户端 | 第 3 节：把 `mcpServers` 改成 `servers`，其余不变 |
+| 需要显式传输字段 | 第 3 节：增加 `"transport": "streamable-http"` |
+| 仅支持 stdio 的客户端 | 第 3 节：使用 `mcp/stdio-bridge.mjs` 桥接配置 |
+| 无法写配置文件、只能发 HTTP 请求 | 第 3 节：`tools/list` 的 JSON-RPC `curl` 示例，agent 可直接调用 |
+
+> 提示词包含明文令牌，只发给信任的 agent；不要粘贴到公开仓库、群聊或日志。泄露后在后台吊销该令牌并重新创建。
+
 ## 4. 工具目录（18 个）
 
 | 工具 | 权限 | 说明 |

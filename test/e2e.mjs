@@ -746,6 +746,67 @@ await step("mcp: 令牌列表不含明文", async () => {
   return `${r.data.tokens.length} tokens, endpoint=${r.data.endpoint}`;
 });
 
+await step("mcp: Agent 配置提示词符合结构规范", async () => {
+  const { buildAgentPrompt, PROMPT_SECTIONS, PROMPT_SPEC } = await import("../src/ui/js/mcp-prompt.js");
+  const catalog = await api.get("/api/mcp");
+  const tools = catalog.data.tools;
+  const token = "qx_mcp_PROMPTTEST";
+  const prompt = buildAgentPrompt({
+    token,
+    endpoint: catalog.data.endpoint,
+    scopes: ["read", "write"],
+    tools,
+    protocols: catalog.data.protocols,
+    appVersion: "1.0.0",
+  });
+  assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
+  let cursor = -1;
+  for (const section of PROMPT_SECTIONS) {
+    const at = prompt.indexOf(`## ${section}`);
+    assert.ok(at > cursor, `section order broken: ${section}`);
+    cursor = at;
+  }
+  for (const needle of [
+    token,
+    catalog.data.endpoint,
+    '"type": "http"',
+    "mcpServers",
+    "stdio-bridge.mjs",
+    "confirm: true",
+    "Insufficient scope",
+    "已连接 Qexo MCP",
+    "2025-06-18",
+    "```json",
+    "```bash",
+  ]) {
+    assert.ok(prompt.includes(needle), `missing: ${needle}`);
+  }
+  for (const tool of tools) assert.ok(prompt.includes(tool.name), `missing tool: ${tool.name}`);
+  assert.equal((prompt.match(/qx_mcp_PROMPTTEST/g) || []).length, 2, "token must appear exactly twice");
+  assert.equal(PROMPT_SPEC.version, "1.0");
+  assert.equal(PROMPT_SPEC.required.length, 11);
+  return `${PROMPT_SECTIONS.length} sections, ${tools.length} tools, ${prompt.length} chars`;
+});
+
+await step("mcp: 只读令牌提示词明确作用域限制", async () => {
+  const { buildAgentPrompt } = await import("../src/ui/js/mcp-prompt.js");
+  const catalog = await api.get("/api/mcp");
+  const token = "qx_mcp_READONLY";
+  const prompt = buildAgentPrompt({
+    token,
+    endpoint: catalog.data.endpoint,
+    scopes: ["read"],
+    tools: catalog.data.tools,
+    protocols: catalog.data.protocols,
+  });
+  assert.ok(prompt.includes("仅可调用下列只读工具"), prompt.slice(0, 200));
+  assert.ok(prompt.includes("Insufficient scope"));
+  assert.ok(!prompt.includes("可调用全部工具"));
+  assert.ok(prompt.includes("create_post"), "write tools must still be listed");
+  assert.equal((prompt.match(/qx_mcp_READONLY/g) || []).length, 2);
+  return "read-only scope stated, write tools documented";
+});
+
 /* ---------------- quota ---------------- */
 
 await step("quota: 统计 VCS API 调用量", async () => {

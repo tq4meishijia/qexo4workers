@@ -8,7 +8,7 @@
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 在线实例 | <https://qexo-workers.tq4meishijia.workers.dev> |
-| 当前 Worker 版本 | `18f10728-f7ff-4d25-9eda-6b92876e0ffb` |
+| 当前 Worker 版本 | `6da1f4ae-5bac-4185-8207-8d37521eeded` |
 | 云账号 | `tq4meishijia@gmail.com`（Account ID `92d3a579…`） |
 | 许可证 | GPL-3.0-or-later（上游 Qexo 衍生作品） |
 
@@ -57,6 +57,7 @@
 | S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、默认留空语义 |
 | S9 文档与仓库化 | ✅ 完成 | README / handoff / 架构图 / 截图资源 / GitHub 仓库 |
 | S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 均为 `1.0.0` |
+| S11 Agent 一键接入提示词 | ✅ 完成 | `src/ui/js/mcp-prompt.js` 纯函数 + 创建令牌弹窗自动生成 / 复制 + 结构规范文档 |
 
 ### 2.2 验收结果
 
@@ -92,6 +93,7 @@
 | `src/store.ts` | 设置 15 s 内存缓存、D1 `cache` 30 s tree 快照 |
 | `src/auth.ts` | PBKDF2-SHA256 100k、HMAC Cookie、CSRF 双提交、限流、reCAPTCHA |
 | `src/mcp.ts` | Streamable HTTP、18 工具、资源/提示词、SHA-256 令牌与作用域 |
+| `src/ui/js/mcp-prompt.js` | 与 DOM 解耦的提示词生成器：固定 6 段结构、11 项必备要素、令牌仅出现两次、HTTP/stdio/纯 HTTP 三套适配方案；Node 可直接单测 |
 | `src/ui/js/provider-form.js` | PAT 链接、密钥检测、仓库/分支下拉、默认留空与空值拦截（初始化向导与设置页复用） |
 | `src/api-app.ts` | 管理 API；`mergeSecrets` 只合并凭据字段，空 repo/branch 不回填 |
 
@@ -175,7 +177,7 @@
 ### 5.5 升级与协作
 
 - 上游 Qexo 更新时，先对照 `docs/qexo-inventory.md` 判断新增功能是否受 Workers 限制；可行性评估参考 `docs/migration-mapping.md`。
-- 新增 MCP 工具时：在 `src/mcp.ts` 注册 `TOOLS` 并声明 `scope`，同步 `docs/mcp.md` 工具表与 `test/e2e.mjs` 用例数。
+- 新增 MCP 工具时：在 `src/mcp.ts` 注册 `TOOLS` 并声明 `scope`；提示词功能清单由 `/api/mcp` 动态读取，无需改 `mcp-prompt.js`，但需同步 `docs/mcp.md` 工具表与 `test/e2e.mjs` 用例数。
 - 新增 API 时：在 `src/index.ts` 注册路由并复用 `authed` / `staff` / `token` 中间件，写操作必须校验 CSRF。
 - 文档数字（测试通过数、版本号、包体）随版本更新，统一维护在 `README.md`、`docs/test-report.md`、本文件三处。
 

@@ -248,21 +248,50 @@ await step("ui: 图床页与友链页可访问", async () => {
   assert.ok(text.includes("添加友链"));
 });
 
-await step("ui: MCP 页面创建令牌", async () => {
+await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
   await page.goto(base + "/#/mcp");
   await page.waitForSelector("#new-token");
   const text = await page.textContent("#view");
   assert.ok(text.includes("Streamable HTTP"), text.slice(0, 200));
+  assert.ok(text.includes("Agent 提示词结构规范"), "prompt spec missing on page");
   await page.click("#new-token");
   await page.waitForSelector("#t-name");
   await page.fill("#t-name", "UI 测试令牌");
   await page.check("#t-write");
   await page.click(".modal-foot .btn.primary");
-  await page.waitForSelector("#new-token-value");
+  await page.waitForSelector("#new-agent-prompt");
   const token = await page.inputValue("#new-token-value");
   assert.ok(token.startsWith("qx_mcp_"), token.slice(0, 12));
+  const prompt = await page.inputValue("#new-agent-prompt");
+
+  assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
+  assert.ok(prompt.includes(token), "token missing from prompt");
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.equal((prompt.match(new RegExp(escaped, "g")) || []).length, 2, "token must appear exactly twice");
+  for (const needle of [
+    '"type": "http"',
+    "mcpServers",
+    "stdio-bridge.mjs",
+    "confirm: true",
+    "已连接 Qexo MCP",
+    "qexo_overview",
+    "create_post",
+    "Insufficient scope",
+    "2025-06-18",
+  ]) {
+    assert.ok(prompt.includes(needle), `missing: ${needle}`);
+  }
+  assert.equal((prompt.match(/^## /gm) || []).length, 6, "fixed 6 sections");
+  await page.click(".modal-foot .btn.primary"); // copy prompt, modal stays open
+  assert.equal(await page.isVisible("#new-agent-prompt"), true, "modal closed after copy");
+  await page.evaluate(() => {
+    const toasts = document.getElementById("toasts");
+    if (toasts) toasts.innerHTML = "";
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(250);
   await page.screenshot({ path: "test/out/ui-mcp.png", fullPage: true });
-  return "token created via UI";
+  return `prompt ${prompt.length} chars, ${(prompt.match(/^## /gm) || []).length} sections`;
 });
 
 await step("ui: 无 JS 运行时错误", async () => {

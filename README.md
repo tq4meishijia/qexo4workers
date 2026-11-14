@@ -105,6 +105,7 @@ sequenceDiagram
 | 管理 API | 41 个接口，含 `/api/set_hexo` 等旧路径别名，路径与字段尽量保持 Qexo 语义 |
 | 主题兼容层 | 25 个 `/pub/*` 接口，token 鉴权与返回结构不变，现有 Hexo 主题可直接使用 |
 | MCP（AI Agent） | `POST /mcp` Streamable HTTP，18 个工具（10 只读 + 8 写入）、资源与提示词、read/write 令牌作用域 |
+| Agent 一键接入提示词 | 创建令牌时同步生成自包含 Markdown 提示词（令牌 / 端点 / 配置 / 工具 / 适配 / 排错），可原样发给任意 AI agent |
 | stdio 桥接 | `mcp/stdio-bridge.mjs` 让只支持 stdio 的客户端也能接入 |
 
 ### 2.3 安全
@@ -250,7 +251,17 @@ curl -s "$BASE/pub/friends"
 
 ### 5.3 接入 WorkBuddy / 其它 AI Agent
 
-在后台 **MCP 接入** 创建令牌（只显示一次），写入 `~/.workbuddy/mcp.json`：
+**推荐：一键接入提示词。** 在后台 **MCP 接入** 创建令牌后，弹窗会自动生成一段可直接发给任意 AI agent 的 Markdown 提示词，点「复制 Agent 配置提示词」即可。它自包含以下内容，agent 无需追问即可完成配置：
+
+- 明文令牌、端点 URL、传输与协议版本、当前作用域；
+- 标准 `mcpServers` HTTP 配置（含 `type` / `url` / `headers`）；
+- 客户端适配规则：`servers` 键名、`transport` 字段、stdio 桥接配置、纯 HTTP JSON-RPC 回退；
+- 18 个工具的功能清单（按 read/write 分组）、使用说明与首条验证指令；
+- 安全警告、401/403/429 排错与完成回执要求。
+
+提示词固定 6 段结构，配置块均为可直接解析的 JSON；令牌只在连接信息与标准配置中出现两次，其余示例用 `$QEXO_MCP_TOKEN` 占位。规范详见 [`docs/mcp.md`](docs/mcp.md) 第 3.4 节。令牌明文只在创建时显示一次，请妥善保管。
+
+也可以只复制 HTTP 配置片段，手工写入 `~/.workbuddy/mcp.json`：
 
 ```json
 {
@@ -283,6 +294,7 @@ src/
   api-public.ts     /pub 兼容层
   mcp.ts            MCP 服务端（JSON-RPC / 工具 / 资源 / 令牌）
   ui/               管理端 SPA（原生 JS/CSS，7 语言词典）
+    js/mcp-prompt.js  Agent 配置提示词生成器（纯函数，Node 可直接单测）
 mcp/stdio-bridge.mjs   stdio → HTTP 桥接
 migrations/        D1 schema
 docs/              调研、部署、迁移映射、配额、MCP、测试报告、交接
@@ -295,7 +307,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 | 套件 | 命令 | 结果 |
 |---|---|---|
-| API 端到端 | `npm test` | **56/56** |
+| API 端到端 | `npm test` | **58/58** |
 | 浏览器 UI | `npm run test:ui` | **13/13** |
 | 线上 API 冒烟 | `npm run test:prod` | **15/15**（0 跳过） |
 | 线上浏览器 | `node test/prod-ui.mjs` | **7/7** |
