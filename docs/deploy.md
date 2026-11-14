@@ -55,7 +55,7 @@ Provider 的 GitHub Token、图床密钥不放在环境变量里，而是登录�
 npm run deploy
 ```
 
-首次部署会输出 `https://qexo-workers.<subdomain>.workers.dev`。打开任意页面会被守卫重定向到独立登录页 `/login`：
+首次部署会输出形如 `https://<worker-name>.<subdomain>.workers.dev` 的地址。该真实地址不写入仓库；线上冒烟测试通过环境变量 `QEXO_BASE_URL` 传入，文档与示例统一使用 `https://qexo.example.com`。打开任意页面会被守卫重定向到独立登录页 `/login`：
 
 1. 用初始账号 `admin` / `admin123` 登录（首次请求时自动创建，无需手工建号）；
 2. 登录后进入内容源配置：点「申请 Fine-grained PAT ↗」在新标签页打开 GitHub 创建页（已预填名称、90 天有效期与 Contents 读写）；在该页选择 `Only select repositories` 并只勾选博客仓库，生成后粘贴回来，点「检测密钥」自动列出该密钥可访问的仓库；仓库与分支下拉默认留空，需逐项明确选择（不会自动选中默认分支），点「刷新列表」可重新读取；

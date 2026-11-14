@@ -1,7 +1,7 @@
 /**
  * Production smoke test against a deployed Worker.
  *
- *   node test/prod-smoke.mjs https://qexo-workers.<sub>.workers.dev
+ *   QEXO_BASE_URL=<deployment-url> node test/prod-smoke.mjs
  *
  * Initializes a fresh deployment (if needed), then exercises auth, content
  * read path, friends, talks, analytics and MCP against the real Cloudflare
@@ -12,7 +12,8 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
 
-const BASE = (process.argv[2] || "https://qexo-workers.tq4meishijia.workers.dev").replace(/\/+$/, "");
+// Deployment URL is never stored in the repo: pass it as argv[2] or QEXO_BASE_URL.
+const BASE = (process.argv[2] || process.env.QEXO_BASE_URL || "https://qexo.example.com").replace(/\/+$/, "");
 const CRED_FILE = "test/out/deploy-credentials.txt";
 const results = [];
 let failures = 0;
@@ -136,7 +137,7 @@ if (initState && initState.init < 6) {
     assert(r.data?.status === true, JSON.stringify(r.data));
     assert(r.data.next_step === 6, JSON.stringify(r.data));
     fs.mkdirSync("test/out", { recursive: true });
-    fs.writeFileSync(CRED_FILE, `url=${BASE}\nusername=${username}\npassword=${password}\n`);
+    fs.writeFileSync(CRED_FILE, `url=set-via-QEXO_BASE_URL\nusername=${username}\npassword=${password}\n`);
   });
 } else {
   console.log("  · 已完成初始化，跳过向导");
@@ -336,7 +337,8 @@ const passed = results.filter((r) => r.ok).length;
 fs.mkdirSync("test/out", { recursive: true });
 fs.writeFileSync(
   "test/out/prod-report.json",
-  JSON.stringify({ base: BASE, generated_at: new Date().toISOString(), passed, skipped, total: results.length, failures, results }, null, 2),
+  // Never persist the real deployment URL in generated reports.
+  JSON.stringify({ base: "https://qexo.example.com", base_source: "argv[2] or QEXO_BASE_URL", generated_at: new Date().toISOString(), passed, skipped, total: results.length, failures, results }, null, 2),
 );
 console.log("=".repeat(56));
 console.log(`${passed}/${results.length - skipped} passed, ${skipped} skipped, ${failures} failed`);

@@ -128,7 +128,7 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 | 项 | 值 |
 |---|---|
 | 账号 | `tq4meishijia@gmail.com`（Account ID `92d3a5791f6758d88fe1b81483f591ed`） |
-| Worker URL | <https://qexo-workers.tq4meishijia.workers.dev> |
+| Worker URL | 占位示例 `https://qexo.example.com`；真实地址由 `QEXO_BASE_URL` / `PUBLIC_ORIGIN` 决定，未写入仓库 |
 | Version ID | `6da1f4ae-5bac-4185-8207-8d37521eeded` |
 | D1 | `qexo` / `e67e85cb-e28c-408a-b2cf-28e9f9839a47`（APAC） |
 | KV | `qexo-cache` / `e0892d23927d427e8ace479fa4682724` |

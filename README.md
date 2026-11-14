@@ -9,9 +9,11 @@
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
 [![Version](https://img.shields.io/badge/version-1.0.0-2563eb.svg)](package.json)
-[![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://qexo-workers.tq4meishijia.workers.dev)
+[![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
-**仓库**：<https://github.com/tq4meishijia/qexo4workers> ｜ **在线实例**：<https://qexo-workers.tq4meishijia.workers.dev>
+**仓库**：<https://github.com/tq4meishijia/qexo4workers> ｜ **示例地址**：<https://qexo.example.com>
+
+> 真实部署地址由 `PUBLIC_ORIGIN` 或自定义域名决定，**不写入仓库**；运行线上测试时通过环境变量 `QEXO_BASE_URL` 传入（见第 6 节）。
 
 ---
 
@@ -224,7 +226,7 @@ Pages 项目连接的是**博客源码仓库**（不是本仓库），构建命�
 ### 5.2 REST API
 
 ```bash
-BASE="https://qexo-workers.tq4meishijia.workers.dev"
+BASE="${QEXO_BASE_URL:-https://qexo.example.com}"
 
 # 1) 登录，保存会话 Cookie
 curl -s -c cookies.txt -X POST "$BASE/api/auth" \
@@ -268,7 +270,7 @@ curl -s "$BASE/pub/friends"
   "mcpServers": {
     "qexo": {
       "type": "http",
-      "url": "https://qexo-workers.tq4meishijia.workers.dev/mcp",
+      "url": "https://qexo.example.com/mcp",
       "headers": { "Authorization": "Bearer qx_mcp_xxx" }
     }
   }
@@ -309,9 +311,11 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 |---|---|---|
 | API 端到端 | `npm test` | **58/58** |
 | 浏览器 UI | `npm run test:ui` | **13/13** |
-| 线上 API 冒烟 | `npm run test:prod` | **15/15**（0 跳过） |
-| 线上浏览器 | `node test/prod-ui.mjs` | **7/7** |
+| 线上 API 冒烟 | `QEXO_BASE_URL=<部署地址> npm run test:prod` | **15/15**（0 跳过） |
+| 线上浏览器 | `QEXO_BASE_URL=<部署地址> node test/prod-ui.mjs` | **7/7** |
 | 生产构建 | `npm run deploy:dry` | 470.85 KiB / gzip 100.11 KiB |
+
+线上测试的目标地址只从命令行参数或环境变量 `QEXO_BASE_URL` 读取（默认 `https://qexo.example.com` 占位符），仓库内不保存真实部署地址。
 
 测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫、文章落盘与回滚、配置校验、图床、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
 
