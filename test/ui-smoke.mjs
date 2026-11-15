@@ -322,7 +322,7 @@ await step("ui: 安全页 Turnstile 开关与页内启用说明", async () => {
   await page.click("#ts-howto");
   await page.waitForSelector("#modal:not([hidden])");
   const modalText = (await page.textContent("#modal-body")) || "";
-  assert.ok(modalText.includes("前置条件") && modalText.includes("wrangler secret put"), modalText.slice(0, 200));
+  assert.ok(modalText.includes("前置条件") && modalText.includes("在本页填写") && modalText.includes("wrangler secret put"), modalText.slice(0, 200));
   const links = await page.$$eval("#modal-body a", (els) => els.length);
   assert.equal(links, 0, "说明浮层不应包含外链");
   await page.click("#modal-foot button");
@@ -344,7 +344,31 @@ await step("ui: 安全页 Turnstile 开关与页内启用说明", async () => {
     null,
     { timeout: 10000 },
   );
-  return "默认可见 / 页内说明无外链 / 即时反馈 / 关闭保持状态";
+
+  await page.fill("#ts-site-key", "0xUISMOKEKEY");
+  await page.fill("#ts-secret", "ui-smoke-secret");
+  await page.fill("#ts-hostnames", "admin.example.com, backup.example.com");
+  await page.click("#ts-save-config");
+  await page.waitForFunction(
+    () => (document.getElementById("ts-cfg-status")?.textContent || "").includes("配置已保存"),
+    null,
+    { timeout: 10000 },
+  );
+  assert.ok(((await page.textContent("#ts-cfg-status")) || "").includes("前置条件已满足"));
+  assert.equal(await page.inputValue("#ts-secret"), "******", "保存后密钥框应重置为占位");
+  const cfgSummary = (await page.textContent("#ts-summary")) || "";
+  assert.ok(cfgSummary.includes("已满足") && cfgSummary.includes("本页填写"), cfgSummary);
+
+  await page.fill("#ts-site-key", "");
+  await page.fill("#ts-hostnames", "");
+  await page.click("#ts-clear-secret");
+  await page.waitForFunction(
+    () => (document.getElementById("ts-summary")?.textContent || "").includes("未满足"),
+    null,
+    { timeout: 10000 },
+  );
+  assert.equal(await page.inputValue("#ts-secret"), "", "清除后密钥框应为空");
+  return "默认可见 / 页内说明无外链 / 即时反馈 / 关闭保持状态 / 网页配置保存与清除";
 });
 
 await step("ui: MCP 页面生成 Agent 配置提示词", async () => {

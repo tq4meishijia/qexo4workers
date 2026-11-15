@@ -342,18 +342,25 @@ function bindImageTab(s) {
 /* security                                                           */
 /* ------------------------------------------------------------------ */
 
+function turnstileSourceLabel(source) {
+  return source === "env" ? "环境变量" : source === "stored" ? "本页填写" : "未配置";
+}
+
 function turnstileSummary(t) {
   const sw = t.switch_on ? "开启" : "关闭";
   const cfg = t.configured ? "已满足" : `未满足（缺少 ${(t.missing || []).join("、") || "必要配置"}）`;
   const eff = t.effective ? "已生效" : "未生效";
-  return `当前状态：开关 ${sw} · 前置条件 ${cfg} · 实际 ${eff}。仅当开关开启且三项环境变量齐备时，登录页才会渲染控件并强制校验。`;
+  const src = t.sources
+    ? `配置来源：Site key ${turnstileSourceLabel(t.sources.siteKey)} · 密钥 ${turnstileSourceLabel(t.sources.secret)} · 域名 ${turnstileSourceLabel(t.sources.hostnames)}。`
+    : "";
+  return `当前状态：开关 ${sw} · 前置条件 ${cfg} · 实际 ${eff}。三项配置可由环境变量或本页填写提供（环境变量优先），开关开启且前置条件齐备时登录页才会渲染控件并强制校验。${src}`;
 }
 
-function applyTurnstileState(t, message = "", kind = "") {
+function applyTurnstileState(t, message = "", kind = "", statusId = "ts-status") {
   const tagInfo = t.effective ? ["ok", "已生效"] : t.switch_on ? ["warn", "已开启 · 未生效"] : ["", "已关闭"];
   const tag = document.getElementById("ts-tag");
   const summary = document.getElementById("ts-summary");
-  const status = document.getElementById("ts-status");
+  const status = document.getElementById(statusId);
   if (tag) {
     tag.className = `tag ${tagInfo[0]}`.trim();
     tag.textContent = tagInfo[1];
@@ -373,22 +380,33 @@ function turnstileHowtoHtml() {
     <ol class="hint" style="line-height:1.85;padding-left:20px;margin:0">
       <li>已在 Cloudflare 创建 widget，取得 <b>Site key</b>（公开值）与 <b>Secret key</b>（私有，仅放服务端）。</li>
       <li>widget 的 Hostname Management 覆盖实际访问域名；添加根域名会自动授权其所有子域名。</li>
-      <li>生产 Worker 齐备三项：<code>TURNSTILE_SITE_KEY</code>（公开，可放配置文件的 <code>[vars]</code>）、<code>TURNSTILE_SECRET</code>、<code>TURNSTILE_HOSTNAMES</code>。</li>
+      <li>需要三项配置：<code>TURNSTILE_SITE_KEY</code>、<code>TURNSTILE_SECRET</code>、<code>TURNSTILE_HOSTNAMES</code>。每项都可由部署环境变量提供，或直接在本页填写；<b>环境变量优先</b>。</li>
     </ol>
     <div class="hr"></div>
-    <p class="hint"><b>二、配置命令（部署机执行，值在交互提示中输入）</b></p>
-    <pre class="mono" style="background:var(--bg-2);border:1px solid var(--border-soft);border-radius:8px;padding:10px;white-space:pre-wrap;margin:0">wrangler secret put TURNSTILE_SECRET --config wrangler.prod.toml
+    <p class="hint"><b>二、在本页填写（无需命令行）</b></p>
+    <ol class="hint" style="line-height:1.85;padding-left:20px;margin:0">
+      <li>在本卡片填写 Site key、Secret key、允许的域名，点击「保存配置」；状态行与顶部徽标会立即更新。</li>
+      <li>Secret key <b>只写不读</b>：已保存时显示 <code>******</code>，留空或保持该占位即不修改；如需移除本页保存的密钥，点「清除已保存密钥」。</li>
+      <li>域名填管理后台主机名，多个用英文逗号分隔，不含协议 / 端口 / 路径；<b>生产不得包含 localhost / 127.0.0.1</b>，且需与 Siteverify 返回的 hostname 完全一致。</li>
+      <li>前置条件显示「已满足」后打开开关，切换即时生效；强制刷新登录页确认控件出现并完成一次登录。</li>
+    </ol>
+    <div class="hr"></div>
+    <p class="hint"><b>三、存储位置与安全边界</b></p>
+    <ul class="hint" style="line-height:1.85;padding-left:20px;margin:0">
+      <li>本页填写的值保存在后台 D1 数据库的 <code>settings</code> 表，与安全页现有的 reCAPTCHA 服务端密钥同级；密钥掩码回显，不会出现在设置接口或「高级」页的原始配置中。</li>
+      <li>若要求更高的隔离（写入后不可读回），改用 Cloudflare secret store，在部署机执行：</li>
+    </ul>
+    <pre class="mono" style="background:var(--bg-2);border:1px solid var(--border-soft);border-radius:8px;padding:10px;white-space:pre-wrap;margin:8px 0 0">wrangler secret put TURNSTILE_SECRET --config wrangler.prod.toml
 wrangler secret put TURNSTILE_HOSTNAMES --config wrangler.prod.toml</pre>
     <ul class="hint" style="line-height:1.85;padding-left:20px;margin:8px 0 0">
-      <li><code>TURNSTILE_HOSTNAMES</code> 填管理后台域名，多个用逗号分隔；<b>生产不得包含 localhost / 127.0.0.1</b>，且需与 Siteverify 返回的 hostname 完全一致。</li>
+      <li>两种方式可混用：同名项只要环境变量有值就优先采用，本页填写作为回退；已有 secret store 配置不会因本页留空而失效。</li>
       <li><code>TURNSTILE_VERIFY_URL</code> 仅为本地测试注入点，生产保持未设置。</li>
       <li><code>wrangler secret put</code> 会自动创建新 Worker 版本，无需重新部署；改变的是配置，不是程序版本号。</li>
     </ul>
     <div class="hr"></div>
-    <p class="hint"><b>三、在本页启用与验证</b></p>
+    <p class="hint"><b>四、验证与回退</b></p>
     <ol class="hint" style="line-height:1.85;padding-left:20px;margin:0">
-      <li>前置条件显示「已满足」后打开本页开关；切换会立即保存并即时生效，本卡片内给出反馈。</li>
-      <li>强制刷新登录页确认控件出现，完成一次登录；同一 token 重放会被拒绝。</li>
+      <li>完成一次登录；同一 token 重放会被拒绝（一次性）。</li>
       <li>关闭开关会立即恢复原有登录 / reCAPTCHA 路径，不会锁死后台。</li>
     </ol>
     <p class="hint mt">密钥请勿写入仓库或聊天。本说明为页内浮层，不会跳转或打开外部站点。</p>`;
@@ -396,6 +414,8 @@ wrangler secret put TURNSTILE_HOSTNAMES --config wrangler.prod.toml</pre>
 
 function turnstileCard(s) {
   const t = s.turnstile || { switch_on: false, configured: false, effective: false, missing: [] };
+  const v = s.settings || {};
+  const storedSecret = t.sources?.secret === "stored";
   const tagCls = t.effective ? "ok" : t.switch_on ? "warn" : "";
   const tagText = t.effective ? "已生效" : t.switch_on ? "已开启 · 未生效" : "已关闭";
   return `<div class="card">
@@ -415,6 +435,28 @@ function turnstileCard(s) {
       <div class="picker-note" id="ts-summary">${esc(turnstileSummary(t))}</div>
       <div class="picker-status" id="ts-status"></div>
     </div>
+    <div class="hr"></div>
+    <div class="field-head"><span>连接配置（本页填写或部署环境变量，环境变量优先）</span></div>
+    <div class="row">
+      ${field("Site key（公开值）", "ts-site-key", v.TURNSTILE_SITE_KEY || "", {
+        placeholder: "0x4AAAAAAA…",
+        hint: "已在部署环境设置同名变量时，环境变量优先；此处留空即沿用环境变量。",
+      })}
+      ${field("允许的域名", "ts-hostnames", v.TURNSTILE_HOSTNAMES || "", {
+        placeholder: "admin.example.com",
+        hint: "多个用英文逗号分隔，不含协议与路径；需与 Siteverify 返回的 hostname 一致。",
+      })}
+    </div>
+    ${field("Secret key（仅服务端使用）", "ts-secret", t.secret_set ? "******" : "", {
+      type: "password",
+      placeholder: "留空表示不修改",
+      hint: "只写不读：已保存时显示 ******，留空或保持占位即保留原值；密钥由环境变量提供时本页无需填写。",
+    })}
+    <div class="field-tools" style="margin:6px 0 10px">
+      <button type="button" class="link-btn" id="ts-clear-secret" style="${storedSecret ? "" : "display:none"}">清除已保存密钥</button>
+    </div>
+    <button class="btn primary" id="ts-save-config">保存配置</button>
+    <div class="picker-status" id="ts-cfg-status"></div>
   </div>`;
 }
 
@@ -502,6 +544,46 @@ function bindSecurityTab() {
         buttons: [{ label: "关闭", cls: "ghost" }],
       });
   }
+
+  const saveTurnstileConfig = async (extra = {}) => {
+    const btn = document.getElementById("ts-save-config");
+    const status = document.getElementById("ts-cfg-status");
+    btn.disabled = true;
+    status.className = "picker-status loading";
+    status.textContent = "正在保存…";
+    try {
+      const res = await api("/api/settings/turnstile_config", {
+        method: "POST",
+        body: {
+          site_key: document.getElementById("ts-site-key").value,
+          hostnames: document.getElementById("ts-hostnames").value,
+          secret: document.getElementById("ts-secret").value,
+          ...extra,
+        },
+      });
+      const t = res.turnstile;
+      applyTurnstileState(t, "", "", "ts-cfg-status");
+      status.className = `picker-status${t.configured ? " ok" : " warn"}`;
+      status.textContent = res.msg;
+      // Never leave a typed secret in the DOM; the endpoint is write-only.
+      document.getElementById("ts-secret").value = t.secret_set ? "******" : "";
+      const clearBtn = document.getElementById("ts-clear-secret");
+      if (clearBtn) clearBtn.style.display = t.sources?.secret === "stored" ? "" : "none";
+      toast(res.msg, t.configured ? "ok" : "warn");
+      await loadSettings(true);
+    } catch (e) {
+      status.className = "picker-status err";
+      status.textContent = `保存失败：${e.message}`;
+      toast(e.message, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  const cfgBtn = document.getElementById("ts-save-config");
+  if (cfgBtn) cfgBtn.onclick = () => saveTurnstileConfig();
+  const clearSecretBtn = document.getElementById("ts-clear-secret");
+  if (clearSecretBtn) clearSecretBtn.onclick = () => saveTurnstileConfig({ clear_secret: true });
 }
 
 /* ------------------------------------------------------------------ */

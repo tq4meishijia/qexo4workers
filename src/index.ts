@@ -217,6 +217,7 @@ router.post("/api/settings/github/repos", staff(app.apiGithubRepos));
 router.post("/api/settings/github/branches", staff(app.apiGithubBranches));
 router.post("/api/settings/image_host", staff(app.apiSetImageHost));
 router.post("/api/settings/turnstile", staff(app.apiSetTurnstile));
+router.post("/api/settings/turnstile_config", staff(app.apiSetTurnstileConfig));
 router.post("/api/settings/user", authed(app.apiSetUser));
 router.get("/api/custom", authed(app.apiCustomFields));
 router.post("/api/custom", staff(app.apiCustomFields));

@@ -176,6 +176,31 @@ await step("关闭开关后立即恢复原有登录路径", async () => {
   return "前置条件齐备但开关关闭时不生效";
 });
 
+await step("网页填写不覆盖环境变量（环境变量优先）", async () => {
+  const saved = await authedPost("/api/settings/turnstile_config", {
+    site_key: "0xWEBFORMKEY",
+    secret: "webform-secret",
+    hostnames: "webform.example.com",
+  });
+  assert.equal(saved.data.status, true, JSON.stringify(saved.data));
+  const t = saved.data.turnstile;
+  assert.equal(t.site_key, SITEKEY, "site key 应仍取环境变量");
+  assert.deepEqual(t.hostnames, ["localhost", "127.0.0.1"], "域名应仍取环境变量");
+  assert.equal(t.sources.secret, "env", "密钥应仍取环境变量");
+  assert.equal(t.configured, true);
+  const s = await authedGet("/api/settings");
+  assert.equal(s.settings.TURNSTILE_SECRET, "******", "网页保存的密钥也应掩码");
+  assert.ok(!JSON.stringify(s).includes("webform-secret"), "响应不得回显网页密钥");
+  const cleared = await authedPost("/api/settings/turnstile_config", {
+    site_key: "",
+    hostnames: "",
+    clear_secret: true,
+  });
+  assert.equal(cleared.data.turnstile.configured, true, "环境变量仍应齐备");
+  assert.equal(cleared.data.turnstile.sources.secret, "env");
+  return "环境变量优先，网页值仅作回退且不回显";
+});
+
 console.log("=".repeat(52));
 console.log(`${results.length - failures}/${results.length} passed, ${failures} failed`);
 await servers.stop();

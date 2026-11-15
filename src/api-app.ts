@@ -39,7 +39,7 @@ import {
 } from "./auth";
 import { cacheDel } from "./store";
 import { createMcpToken, listMcpTokens, mcpToolCatalog, revokeMcpToken } from "./mcp";
-import { TURNSTILE_SWITCH_KEY, turnstileState, turnstilePublicState, verifyTurnstile } from "./turnstile";
+import { TURNSTILE_KEYS, TURNSTILE_SWITCH_KEY, turnstileState, turnstilePublicState, verifyTurnstile } from "./turnstile";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -66,6 +66,7 @@ function publicSettings(all: Record<string, string>): Record<string, string> {
   const copy: Record<string, string> = { ...all };
   delete copy[`_SESSION_SECRET`];
   copy.WEBHOOK_APIKEY = all.WEBHOOK_APIKEY ? "******" : "";
+  copy.TURNSTILE_SECRET = all.TURNSTILE_SECRET ? "******" : "";
   try {
     const img = JSON.parse(all.IMG_HOST || "{}");
     if (img?.params) {
@@ -158,7 +159,7 @@ export async function apiAuth(ctx: Ctx): Promise<Response> {
   const turnstileToken = str(body, "cf-turnstile-response");
   if (turnstile.enabled) {
     // Server-side gate: a client cannot bypass it by omitting `type`.
-    const result = await verifyTurnstile(ctx.env, turnstileToken, ip);
+    const result = await verifyTurnstile(ctx.env, store, turnstileToken, ip);
     if (!result.ok) return fail("人机验证失败，请刷新页面后重试");
   } else if (kind === "v3" || kind === "v2") {
     const secret = await store.get(kind === "v3" ? "LOGIN_RECAPTCHA_SERVER_TOKEN" : "LOGIN_RECAPTCHAV2_SERVER_TOKEN");
@@ -768,10 +769,12 @@ export async function apiGetSettings(ctx: Ctx): Promise<Response> {
   const all = await store.all();
   const customs = await ctx.env.DB.prepare("SELECT name, content FROM custom_fields ORDER BY name").all<any>();
   const ts = await turnstileState(ctx.env, store);
+  const raw = { ...all };
+  if (raw.TURNSTILE_SECRET) raw.TURNSTILE_SECRET = "******";
   return json({
     status: true,
     settings: publicSettings(all),
-    raw: all,
+    raw,
     custom: customs.results || [],
     languages: languageList(),
     platforms: platformNames(),
@@ -884,6 +887,36 @@ export async function apiSetTurnstile(ctx: Ctx): Promise<Response> {
     : state.enabled
       ? "Turnstile 已启用并立即生效"
       : `开关已保存，但前置条件未满足（缺少 ${state.missing.join("、")}），当前仍未生效`;
+  return json({ status: true, msg, turnstile: turnstilePublicState(state) });
+}
+
+/**
+ * Web-form configuration for Turnstile. The secret is write-only: a blank or
+ * masked input keeps the stored value, and clearing it needs an explicit flag
+ * so a plain "Save" can never wipe the credential by accident. Stored values
+ * are a fallback only - anything supplied as an env var / secret still wins.
+ */
+export async function apiSetTurnstileConfig(ctx: Ctx): Promise<Response> {
+  const body = await readBody(ctx.req);
+  const hostnames = str(body, "hostnames").trim();
+  if (hostnames && /[/:\s]/.test(hostnames.replace(/,\s*/g, ","))) {
+    return fail("域名只能填写主机名，多个用英文逗号分隔，不含协议、端口或路径");
+  }
+  const store = new Store(ctx.env);
+  const values: Record<string, string> = {};
+  if (body.site_key !== undefined) values[TURNSTILE_KEYS.siteKey] = str(body, "site_key").trim();
+  if (body.hostnames !== undefined) values[TURNSTILE_KEYS.hostnames] = hostnames;
+  const secret = str(body, "secret").trim();
+  if (body.clear_secret === true || String(body.clear_secret ?? "") === "是") {
+    values[TURNSTILE_KEYS.secret] = "";
+  } else if (secret && !secret.includes("******")) {
+    values[TURNSTILE_KEYS.secret] = secret;
+  }
+  if (Object.keys(values).length) await store.setMany(values);
+  const state = await turnstileState(ctx.env, store);
+  const msg = state.configured
+    ? `配置已保存，前置条件已满足${state.enabled ? "，登录验证已生效" : "，打开开关即可生效"}`
+    : `配置已保存，仍缺少 ${state.missing.join("、")}`;
   return json({ status: true, msg, turnstile: turnstilePublicState(state) });
 }
 

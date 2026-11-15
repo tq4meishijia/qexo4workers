@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.4.0", "runtime version mismatch");
+  assert.equal(me.data.version, "1.5.0", "runtime version mismatch");
   assert.equal(me.data.turnstile?.enabled, false, "Turnstile must stay disabled without operator secrets");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
@@ -611,6 +611,58 @@ await step("settings: Turnstile 开关切换即时回显与前置条件提示", 
   return "开启/关闭即时回显，前置条件缺失时不生效";
 });
 
+await step("settings: 网页端填写 Turnstile 配置即时生效且密钥掩码", async () => {
+  const secret = "e2e-web-turnstile-secret";
+  const saved = await api.post("/api/settings/turnstile_config", {
+    site_key: "0xE2EWEBKEY",
+    secret,
+    hostnames: "admin.example.com, backup.example.com",
+  });
+  assert.equal(saved.data.status, true, JSON.stringify(saved.data));
+  const t = saved.data.turnstile;
+  assert.equal(t.configured, true, JSON.stringify(t));
+  assert.deepEqual(t.missing, []);
+  // Site key is already present in wrangler [vars], so the env value wins.
+  assert.equal(t.site_key, "0x4AAAAAAGBqe3KzCG_zIoD7");
+  assert.deepEqual(t.hostnames, ["admin.example.com", "backup.example.com"]);
+  assert.equal(t.sources.siteKey, "env", JSON.stringify(t.sources));
+  assert.equal(t.sources.secret, "stored", JSON.stringify(t.sources));
+  assert.equal(t.secret_set, true);
+
+  const s = await api.get("/api/settings");
+  assert.equal(s.data.settings.TURNSTILE_SECRET, "******", "设置接口不得回显密钥");
+  assert.equal(s.data.raw.TURNSTILE_SECRET, "******", "高级页原始配置不得回显密钥");
+  assert.ok(!JSON.stringify(s.data).includes(secret), "响应中不得出现真实密钥");
+
+  const on = await api.post("/api/settings/turnstile", { enabled: "是" });
+  assert.equal(on.data.turnstile.effective, true, "网页配置后开关应能实际生效");
+  const off = await api.post("/api/settings/turnstile", { enabled: "否" });
+  assert.equal(off.data.turnstile.effective, false);
+
+  const cleared = await api.post("/api/settings/turnstile_config", {
+    site_key: "",
+    hostnames: "",
+    clear_secret: true,
+  });
+  assert.equal(cleared.data.status, true, JSON.stringify(cleared.data));
+  assert.equal(cleared.data.turnstile.configured, false);
+  assert.ok(cleared.data.turnstile.missing.includes("TURNSTILE_SECRET"));
+  const after = await api.get("/api/settings");
+  assert.equal(after.data.settings.TURNSTILE_SECRET, "", "清除后不应残留密钥");
+  return "网页填写 → 开关生效 → 掩码 → 清除恢复默认";
+});
+
+await step("settings: 非法域名被拒绝且不写入配置", async () => {
+  const before = await api.get("/api/settings");
+  const prev = before.data.settings.TURNSTILE_HOSTNAMES || "";
+  const bad = await api.post("/api/settings/turnstile_config", { hostnames: "https://admin.example.com" });
+  assert.equal(bad.data.status, false, JSON.stringify(bad.data));
+  assert.ok(bad.data.msg.includes("域名"), bad.data.msg);
+  const s = await api.get("/api/settings");
+  assert.equal(s.data.settings.TURNSTILE_HOSTNAMES, prev, "失败请求不得改写配置");
+  return bad.data.msg;
+});
+
 await step("settings: 旧版表单接口（set_abbrlink / set_cdn）", async () => {
   // Qexo sent application/x-www-form-urlencoded here.
   const form = new URLSearchParams({ alg: "crc32", rep: "hex" });
@@ -892,7 +944,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.4.0",
+    appVersion: "1.5.0",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

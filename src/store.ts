@@ -9,7 +9,7 @@
 import type { Env } from "./lib";
 import { nowSec } from "./lib";
 
-export const QEXO_VERSION = "1.4.0";
+export const QEXO_VERSION = "1.5.0";
 export const QEXO_STATIC = "4.0.1";
 
 export const DEFAULT_SETTINGS: Record<string, string> = {
@@ -62,6 +62,9 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   MCP_TOKENS: "[]",
   MCP_ENABLED: "是",
   TURNSTILE_ENABLED: "否",
+  TURNSTILE_SITE_KEY: "",
+  TURNSTILE_SECRET: "",
+  TURNSTILE_HOSTNAMES: "",
   DEFAULT_ADMIN_PASSWORD: "0",
 };
 

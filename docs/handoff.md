@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.4.0** |
+| 项目版本 | **1.5.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -303,4 +303,20 @@
 - **启用路径变更**：三项环境变量齐备之外还需打开后台开关；README §2.3 / 注意事项、`docs/deploy.md` §3.1–3.2 与页内浮层已同步。
 - **验证**：`npm test` 67/67、`npm run test:ui` 20/20、`node test/turnstile.mjs` 11/11、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（480.88 KiB / gzip 102.49 KiB）。
 - **发布**：提交并推送 `main`，附注标签 `v1.4.0`。
+
+---
+
+## 14. v1.5.0 发布（2026-11-15）
+
+- **类型**：`MINOR`（Turnstile 连接配置可在网页端填写），由 `v1.4.0` 递增。
+- **需求**：`TURNSTILE_SECRET` / `TURNSTILE_HOSTNAMES` 能否不敲命令行、直接在网页端填写。按项目既有的「安全页填写 reCAPTCHA 服务端密钥」模式补齐，不新造存储机制。
+- **实现**：
+  - `src/turnstile.ts`：新增 `TURNSTILE_KEYS` 与异步 `turnstileRuntime()`，环境变量优先、D1 回退；`verifyTurnstile()` 改用合并后的 secret / hostnames；`turnstilePublicState()` 增加 `sources` / `secret_set` / `hostnames`，始终不含密钥值。
+  - `src/store.ts`：`DEFAULT_SETTINGS` 增加 `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` / `TURNSTILE_HOSTNAMES` 空默认。
+  - `src/api-app.ts`：`publicSettings()` 与 `/api/settings` 的 `raw`（「高级」页原始配置）均掩码 `TURNSTILE_SECRET`；新增 `apiSetTurnstileConfig()`，`src/index.ts` 注册 `POST /api/settings/turnstile_config`。
+  - `src/ui/js/settings.js`：Turnstile 卡片增加三个输入框、保存配置、清除密钥与独立状态行；摘要显示每项配置来源；浮层改为网页填写为主、命令行为可选并说明两种存储位置的安全边界。
+- **安全边界**：网页值存 D1（与 reCAPTCHA 服务端密钥同级），掩码回显、只写不读；`wrangler secret` 仍可用且优先，隔离更强。环境变量优先保证既有部署不被削弱。真实密钥未索取、未打印、未写入仓库。
+- **启用路径变更**：可直接在本页填写并打开开关完成启用，不再要求命令行；三项环境变量齐备的方式继续可用。
+- **验证**：`npm test` 69/69、`npm run test:ui` 20/20、`node test/turnstile.mjs` 12/12、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（483.64 KiB / gzip 103.11 KiB）。
+- **发布**：提交并推送 `main`，附注标签 `v1.5.0`。
 

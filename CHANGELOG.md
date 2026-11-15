@@ -4,6 +4,19 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.5.0 — 2026-11-15（MINOR）
+
+**新增：Turnstile 连接配置可直接在「设置 → 安全」网页端填写**
+
+- 安全页 Turnstile 卡片新增 Site key / Secret key / 允许的域名三个输入框与「保存配置」按钮；保存即时生效并刷新状态徽标、摘要与提示行。配置保存与功能开关相互独立，互不覆盖。
+- 后端新增 `POST /api/settings/turnstile_config`：仅写入显式提交的字段；密钥只写不读，空白或 `******` 占位保持不变，清除需显式 `clear_secret`；域名做轻量格式校验（拒绝协议 / 端口 / 路径），失败不改写已有配置。
+- 配置合并规则：环境变量（`wrangler secret` / `.dev.vars`）**优先**，D1 网页值作为回退；`/api/settings` 与 `/api/me` 下发 `sources`（环境变量 / 本页填写 / 未配置）与 `secret_set`，页面摘要可见每项来源。已有 secret store 配置不会因网页留空而失效。
+- 密钥存储边界：网页填写的值存 D1 `settings` 表，与安全页现有的 reCAPTCHA 服务端密钥同级；`publicSettings()` 与 `/api/settings` 的 `raw`（「高级」页原始配置）均掩码，真实值不出现在任何设置响应中；保存后前端输入框立即重置为占位，明文不留在 DOM。要求更高隔离仍可用 `wrangler secret put`（值不可读回）。
+- 「如何启用」浮层改为以网页填写为主路径、命令行为可选，并明确两种存储位置的安全边界；保持页内浮层、无外链、关闭后页面状态不变。
+- **启用路径变更**：此前必须补齐 `TURNSTILE_SECRET` / `TURNSTILE_HOSTNAMES` 两项环境变量；现在可直接在本页填写并打开开关完成启用，环境变量方式继续可用且优先级更高。
+
+**验证**：`npm test` 69/69（新增网页配置生效 / 掩码 / 清除与非法域名拒绝）、`npm run test:ui` 20/20（新增表单保存与清除）、`node test/turnstile.mjs` 12/12（新增环境变量优先且网页值不回显）、`browser-qa.mjs` 49/49、`tsc --noEmit` 与 `deploy:dry` 通过。
+
 ## v1.4.0 — 2026-11-15（MINOR）
 
 **新增：设置 → 安全 页的 Turnstile 功能开关与页内启用说明**

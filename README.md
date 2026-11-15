@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.4.0-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.5.0-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.4.0**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.5.0**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -113,7 +113,7 @@ sequenceDiagram
 - 页面守卫：未登录访问 `/` 由 Worker 直接 302 到 `/login?next=…`，SPA 启动与 API 401 双重兜底；回跳路径做同源白名单校验。
 - 凭据：Provider / 图床 token 一律掩码回显；MCP 令牌与 WebHook APIKey 只存 SHA-256，可单独吊销。「GitHub 内容源」图床不另存密钥，直接复用内容源配置。
 - 内容源：默认引导申请 **Fine-grained PAT**，只授权单个博客仓库与 `Contents: Read and write`。
-- 登录人机验证：**设置 → 安全** 页提供 **Cloudflare Turnstile** 开关（默认关闭，开关状态、前置条件与实际生效状态均明确可见）；切换立即保存并生效。仅当三项环境变量齐备且开关开启时，登录页才渲染 widget，服务端在 `/api/auth` 前置 canonical siteverify（校验 `success` / `action=login` / hostname 白名单）；浏览器只取 token，不调用 siteverify。开关旁的「如何启用」在当前页面内以浮层展示完整步骤，不跳转外部站点。密钥只存 `wrangler secret` 或本地 `.dev.vars`，不入库、不回显，配置步骤见 `docs/deploy.md`。
+- 登录人机验证：**设置 → 安全** 页提供 **Cloudflare Turnstile** 开关（默认关闭，状态、前置条件与实际生效状态均可见）与三项连接配置输入框；切换与保存均即时生效。三项配置（`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` / `TURNSTILE_HOSTNAMES`）可直接在本页填写，也可由部署环境变量提供，**环境变量优先**；网页填写的值存 D1 `settings` 表并掩码回显（密钥只写不读，设置接口与「高级」页均不出现明文），要求更高隔离时仍可用 `wrangler secret put`。仅当前置条件齐备且开关开启时，登录页才渲染 widget，服务端在 `/api/auth` 前置 canonical siteverify（校验 `success` / `action=login` / hostname 白名单）；浏览器只取 token，不调用 siteverify。开关旁的「如何启用」在当前页面内以浮层展示完整步骤，不跳转外部站点。配置步骤见 `docs/deploy.md`。
 
 ### 2.4 界面预览
 
@@ -315,7 +315,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 线上测试的目标地址只从命令行参数或环境变量 `QEXO_BASE_URL` 读取（默认 `https://qexo.example.com` 占位符），仓库内不保存真实部署地址。
 
-测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫（含 Turnstile 独立套件 `node test/turnstile.mjs`）、文章落盘与回滚、配置校验、图床（含内容源图床的目录/前缀优先级）、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
+测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫（含 Turnstile 独立套件 `node test/turnstile.mjs` 与网页配置/环境变量优先级）、文章落盘与回滚、配置校验、图床（含内容源图床的目录/前缀优先级）、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
 
 ---
 
@@ -337,7 +337,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 9 | 免费额度 | 按日更 1–3 篇、日均 PV 5,000 估算余量 10 倍以上；瓶颈是 Pages 500 次构建/月，见 `docs/quota-analysis.md` |
 | 10 | 生产配置含资源 ID | `wrangler.prod.toml` 带当前账号的 D1 / KV 标识，fork 后请替换成自己的；该文件**不含任何凭据**，`SESSION_SECRET` 与 PAT 均不入库 |
 | 11 | 内容源图床前缀 | 「GitHub 内容源」默认写入内容源仓库 `img-qexo` 目录、访问前缀为 GitHub 原始 raw；下拉可切换 jsDelivr 等公共 CDN，自定义 http(s) 前缀合法时优先级最高，非法时回退下拉；公共 CDN 属于第三方服务，可用性不由本项目保证 |
-| 12 | Turnstile 启用条件 | 环境变量 `TURNSTILE_SITE_KEY`（公开值）、`TURNSTILE_SECRET`、`TURNSTILE_HOSTNAMES` 三项齐备，**且**在「设置 → 安全」打开开关，才会实际生效；开关默认关闭，页面内同时显示前置条件与实际生效状态。缺任一条件则保持原有登录/reCAPTCHA 路径。生产 hostname 白名单不得包含 localhost / 127.0.0.1，密钥绝不写入仓库 |
+| 12 | Turnstile 启用条件 | `TURNSTILE_SITE_KEY`（公开值）、`TURNSTILE_SECRET`、`TURNSTILE_HOSTNAMES` 三项齐备（网页填写或环境变量，环境变量优先），**且**在「设置 → 安全」打开开关，才会实际生效；开关默认关闭，页面内显示前置条件、配置来源与实际生效状态。网页填写的密钥存 D1 并掩码回显、只写不读；要求更高隔离可改用 `wrangler secret put`（值不可读回）。缺任一条件则保持原有登录/reCAPTCHA 路径。生产 hostname 白名单不得包含 localhost / 127.0.0.1，密钥绝不写入仓库或聊天 |
 
 ---
 
@@ -362,4 +362,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.4.0** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.5.0** · 2026-11
