@@ -265,6 +265,52 @@ await step("ui: 图床页与友链页可访问", async () => {
   assert.ok(text.includes("添加友链"));
 });
 
+await step("ui: 内容源图床下拉/自定义前缀/优先级预览", async () => {
+  await page.goto(base + "/#/settings/image");
+  await page.waitForSelector("#img-type");
+  const types = await page.$$eval("#img-type option", (els) => els.map((e) => e.value));
+  assert.ok(types.includes("GitHub 内容源"), types.join(","));
+
+  await page.selectOption("#img-type", "GitHub 内容源");
+  await page.waitForSelector("#img-cdn-preset");
+  assert.equal(await page.inputValue("#img-dir"), "img-qexo");
+  assert.equal(await page.inputValue("#img-cdn-preset"), "raw");
+  const presets = await page.$$eval("#img-cdn-preset option", (els) => els.map((e) => e.value));
+  assert.ok(presets.includes("jsdelivr"), presets.join(","));
+  const preview0 = (await page.textContent("#img-cdn-preview")) || "";
+  assert.ok(preview0.includes("raw.githubusercontent.com") && preview0.includes("img-qexo"), preview0);
+  assert.ok(preview0.includes("demo/blog") && preview0.includes("main"), preview0);
+
+  await page.selectOption("#img-cdn-preset", "jsdelivr");
+  let preview = (await page.textContent("#img-cdn-preview")) || "";
+  assert.ok(preview.includes("cdn.jsdelivr.net/gh/demo/blog@main"), preview);
+
+  await page.fill("#img-cdn-custom", "https://img.example.com/{repo}/{branch}");
+  preview = (await page.textContent("#img-cdn-preview")) || "";
+  assert.ok(preview.includes("https://img.example.com/demo/blog/main/img-qexo"), preview);
+  assert.ok((await page.textContent("#img-cdn-status")).includes("已生效"));
+
+  await page.fill("#img-cdn-custom", "not a url");
+  preview = (await page.textContent("#img-cdn-preview")) || "";
+  assert.ok(preview.includes("cdn.jsdelivr.net"), `${preview} — 非法输入应回退到下拉预设`);
+  assert.ok((await page.textContent("#img-cdn-status")).includes("不合法"));
+
+  await page.fill("#img-cdn-custom", "https://img.example.com/{repo}/{branch}");
+  await page.fill("#img-dir", "my-images");
+  await page.click("#save-image");
+  await page.waitForTimeout(400);
+  await page.goto(base + "/#/settings/image");
+  await page.waitForSelector("#img-cdn-preset");
+  assert.equal(await page.inputValue("#img-dir"), "my-images");
+  assert.equal(await page.inputValue("#img-cdn-preset"), "jsdelivr");
+  assert.equal(await page.inputValue("#img-cdn-custom"), "https://img.example.com/{repo}/{branch}");
+
+  await page.selectOption("#img-type", "关闭");
+  await page.click("#save-image");
+  await page.waitForTimeout(300);
+  return `${presets.length} 个预设 · 自定义优先级与回填已验证`;
+});
+
 await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
   await page.goto(base + "/#/mcp");
   await page.waitForSelector("#new-token");

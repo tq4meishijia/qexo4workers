@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.1.1-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.2.0-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.1.1**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.2.0**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -91,7 +91,7 @@ sequenceDiagram
 |---|---|
 | 内容 | 文章 / 草稿 / 页面 CRUD、front-matter 可视化编辑、Markdown 预览、abbrlink（crc16/crc32 复刻）、重命名、发布与转草稿 |
 | 配置 | `_config.yml` 等在线编辑、YAML/JSON 合法性校验、7 种博客平台目录映射、自定义字段 |
-| 媒体 | 图床上传 / 列表 / 删除（R2、GitHub、S3、Custom），长缓存读取 |
+| 媒体 | 图床上传 / 列表 / 删除（R2、GitHub、GitHub 内容源、S3、Custom），长缓存读取 |
 | 互动 | 友链与前台申请、说说发布与点赞、PV/UV 统计与域名白名单、站内通知 |
 | 系统 | 4 步初始化向导、8 组设置（含「外观」面板风格切换）、导入导出备份、缓存清理、WebHook 自动配置、部署触发（Pages / Vercel / Actions / 自定义） |
 | 国际化 | 7 种语言词典，由脚本从上游 Python 字典原样导出 |
@@ -111,7 +111,7 @@ sequenceDiagram
 - 密码：PBKDF2-SHA256，100,000 次迭代 + 随机盐；会话 Cookie 为 `HttpOnly + SameSite=Lax + HMAC 签名`。
 - 请求：写操作强制 `X-CSRF-Token`；登录 10 次/10 分钟/IP 限流；友链申请 5 次/小时/IP。
 - 页面守卫：未登录访问 `/` 由 Worker 直接 302 到 `/login?next=…`，SPA 启动与 API 401 双重兜底；回跳路径做同源白名单校验。
-- 凭据：Provider / 图床 token 一律掩码回显；MCP 令牌与 WebHook APIKey 只存 SHA-256，可单独吊销。
+- 凭据：Provider / 图床 token 一律掩码回显；MCP 令牌与 WebHook APIKey 只存 SHA-256，可单独吊销。「GitHub 内容源」图床不另存密钥，直接复用内容源配置。
 - 内容源：默认引导申请 **Fine-grained PAT**，只授权单个博客仓库与 `Contents: Read and write`。
 
 ### 2.4 界面预览
@@ -287,7 +287,7 @@ src/
   vcs.ts            GitHub / GitLab / Gitea / R2 Provider
   github.ts         PAT 健康检查、授权仓库与分支枚举
   content.ts        文章/页面/配置领域逻辑、front-matter、CRC
-  images.ts         R2 / GitHub / S3(SigV4) / Custom 图床
+  images.ts         R2 / GitHub / GitHub 内容源 / S3(SigV4) / Custom 图床
   api-app.ts        管理 API
   api-public.ts     /pub 兼容层
   mcp.ts            MCP 服务端（JSON-RPC / 工具 / 资源 / 令牌）
@@ -314,7 +314,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 线上测试的目标地址只从命令行参数或环境变量 `QEXO_BASE_URL` 读取（默认 `https://qexo.example.com` 占位符），仓库内不保存真实部署地址。
 
-测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫、文章落盘与回滚、配置校验、图床、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
+测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫、文章落盘与回滚、配置校验、图床（含内容源图床的目录/前缀优先级）、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
 
 ---
 
@@ -335,6 +335,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 8 | 已保存值回填与空值拦截 | 内容源表单自动回填已保存的仓库与分支；清空任一字段后保存会被前后端明确拦截，不会静默沿用旧配置 |
 | 9 | 免费额度 | 按日更 1–3 篇、日均 PV 5,000 估算余量 10 倍以上；瓶颈是 Pages 500 次构建/月，见 `docs/quota-analysis.md` |
 | 10 | 生产配置含资源 ID | `wrangler.prod.toml` 带当前账号的 D1 / KV 标识，fork 后请替换成自己的；该文件**不含任何凭据**，`SESSION_SECRET` 与 PAT 均不入库 |
+| 11 | 内容源图床前缀 | 「GitHub 内容源」默认写入内容源仓库 `img-qexo` 目录、访问前缀为 GitHub 原始 raw；下拉可切换 jsDelivr 等公共 CDN，自定义 http(s) 前缀合法时优先级最高，非法时回退下拉；公共 CDN 属于第三方服务，可用性不由本项目保证 |
 
 ---
 
@@ -359,4 +360,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.1.1** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.2.0** · 2026-11

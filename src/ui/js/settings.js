@@ -210,6 +210,95 @@ function bindBasicTab() {
 /* image host                                                         */
 /* ------------------------------------------------------------------ */
 
+const CONTENT_SOURCE_IMAGE_HOST = "GitHub 内容源";
+const DEFAULT_IMAGE_DIR = "img-qexo";
+const DEFAULT_CDN_PRESET = "raw";
+
+/** Mirrors normalizeCustomPrefix() in src/images.ts: an illegal value never wins. */
+function validCustomPrefix(value) {
+  const v = String(value || "").trim();
+  if (!v || v.length > 300 || /[\s\u0000-\u001f]/.test(v) || !/^https?:\/\//i.test(v)) return "";
+  try {
+    const u = new URL(v);
+    if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return "";
+  } catch {
+    return "";
+  }
+  return v.replace(/\/+$/, "");
+}
+
+function contentSourceTarget(s) {
+  try {
+    const cfg = JSON.parse(s.raw?.PROVIDER || s.settings?.PROVIDER || "{}");
+    return { repo: cfg.params?.repo || "owner/repo", branch: cfg.params?.branch || "main" };
+  } catch {
+    return { repo: "owner/repo", branch: "main" };
+  }
+}
+
+function contentSourceImageFields(meta, params, s) {
+  const options = meta?.params?.cdn_preset?.options || [];
+  const preset = params.cdn_preset || DEFAULT_CDN_PRESET;
+  const dir = params.path || DEFAULT_IMAGE_DIR;
+  const { repo, branch } = contentSourceTarget(s);
+  return `
+    <label class="field"><span>上传目录（内容源仓库根目录下）</span>
+      <input data-i="path" id="img-dir" value="${esc(dir)}" placeholder="${DEFAULT_IMAGE_DIR}" />
+      <small>默认 <code>${DEFAULT_IMAGE_DIR}</code>；留空保存后仍回退默认值。仓库与分支读取「设置 → 内容源」的当前配置，密钥直接复用，不在此重复填写。</small>
+    </label>
+    <label class="field"><span>访问前缀（公共 CDN 下拉）</span>
+      <select data-i="cdn_preset" id="img-cdn-preset">
+        ${options.map((o) => `<option value="${esc(o.value)}" data-template="${esc(o.template || "")}" ${o.value === preset ? "selected" : ""}>${esc(o.label)}</option>`).join("")}
+      </select>
+      <small>默认 <b>GitHub 原始 raw</b>；下拉均为第三方公共服务，可用性不由本项目保证，可随时改选。</small>
+    </label>
+    <label class="field"><span>自定义前缀（可选，优先级最高）</span>
+      <input data-i="cdn_custom" id="img-cdn-custom" value="${esc(params.cdn_custom || "")}" placeholder="https://cdn.example.com/{repo}/{branch}" />
+      <small>支持占位符 <code>{repo}</code>（owner/repo）与 <code>{branch}</code>；填写合法 http(s) 前缀时覆盖下拉，留空或非法时自动回退到下拉选项。</small>
+    </label>
+    <div class="picker-note" id="img-cdn-preview" data-repo="${esc(repo)}" data-branch="${esc(branch)}"></div>
+    <div class="picker-status" id="img-cdn-status"></div>
+    <p class="hint">生效规则：自定义前缀（合法） &gt; 下拉预设 &gt; GitHub 原始 raw；上传目录（可覆盖） &gt; <code>${DEFAULT_IMAGE_DIR}</code>。</p>`;
+}
+
+function imageFieldsHtml(meta, params, s) {
+  if (meta?.name !== CONTENT_SOURCE_IMAGE_HOST) return paramsFields(meta?.params, params, "i");
+  return contentSourceImageFields(meta, params, s);
+}
+
+function bindImagePreview() {
+  const preset = document.getElementById("img-cdn-preset");
+  if (!preset) return;
+  const custom = document.getElementById("img-cdn-custom");
+  const dir = document.getElementById("img-dir");
+  const preview = document.getElementById("img-cdn-preview");
+  const status = document.getElementById("img-cdn-status");
+  const update = () => {
+    const repo = preview.dataset.repo || "owner/repo";
+    const branch = preview.dataset.branch || "main";
+    const valid = validCustomPrefix(custom.value);
+    const illegal = !!custom.value.trim() && !valid;
+    const template = valid || preset.selectedOptions[0]?.dataset.template || "";
+    const base = template.replaceAll("{repo}", repo).replaceAll("{branch}", branch).replace(/\/+$/, "");
+    const folder = (dir.value.trim() || DEFAULT_IMAGE_DIR).replace(/^\/+|\/+$/g, "");
+    preview.textContent = `当前生效前缀：${base}/${folder}/…（仓库 ${repo} · 分支 ${branch}）`;
+    if (illegal) {
+      status.className = "picker-status err";
+      status.textContent = "自定义前缀不合法，已回退到下拉选项";
+    } else if (valid) {
+      status.className = "picker-status ok";
+      status.textContent = "自定义前缀已生效，覆盖下拉选项";
+    } else {
+      status.className = "picker-status";
+      status.textContent = "使用下拉预设（默认 GitHub 原始 raw）";
+    }
+  };
+  preset.addEventListener("change", update);
+  custom.addEventListener("input", update);
+  dir.addEventListener("input", update);
+  update();
+}
+
 function imageTab(s) {
   let cfg = { type: "关闭", params: {} };
   try {
@@ -221,9 +310,9 @@ function imageTab(s) {
   return `<div class="card">
     <div class="card-head"><div><h3>图床</h3><div class="sub">上传接口：<code>/api/upload</code>，记录保存在 D1</div></div></div>
     ${select("图床类型", "img-type", [{ value: "关闭", label: "关闭" }, ...s.image_hosts.map((h) => ({ value: h.name, label: h.name }))], cfg.type)}
-    <div id="img-fields">${paramsFields(meta?.params, cfg.params || {}, "i")}</div>
+    <div id="img-fields">${imageFieldsHtml(meta, cfg.params || {}, s)}</div>
     <button class="btn primary" id="save-image">保存</button>
-    <p class="hint mt">R2 为 Workers 原生方案：文件写入绑定桶，默认通过 <code>/api/images/file/*</code> 提供访问。GitHub 图床会把图片提交到仓库；S3 兼容 AWS SigV4，可用于 R2 / 阿里云 OSS / MinIO。</p>
+    <p class="hint mt">R2 为 Workers 原生方案：文件写入绑定桶，默认通过 <code>/api/images/file/*</code> 提供访问。GitHub 图床会把图片提交到仓库；S3 兼容 AWS SigV4，可用于 R2 / 阿里云 OSS / MinIO。「${CONTENT_SOURCE_IMAGE_HOST}」为独立类型：写入内容源仓库的 <code>${DEFAULT_IMAGE_DIR}</code> 目录并复用其密钥，访问前缀可用公共 CDN 下拉或自定义前缀覆盖。</p>
   </div>`;
 }
 
@@ -231,8 +320,10 @@ function bindImageTab(s) {
   const type = document.getElementById("img-type");
   type.onchange = () => {
     const meta = s.image_hosts.find((h) => h.name === type.value);
-    document.getElementById("img-fields").innerHTML = paramsFields(meta?.params, {}, "i");
+    document.getElementById("img-fields").innerHTML = imageFieldsHtml(meta, {}, s);
+    bindImagePreview();
   };
+  bindImagePreview();
   document.getElementById("save-image").onclick = async () => {
     try {
       await api("/api/settings/image_host", {

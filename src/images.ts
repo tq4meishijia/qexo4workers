@@ -5,7 +5,8 @@
  */
 
 import { HttpError, b64encode, hex, utf8ToB64, type Env } from "./lib";
-import { guessContentType, type ProviderParams } from "./vcs";
+import { guessContentType, type ProviderConfig, type ProviderParams } from "./vcs";
+import { Store } from "./store";
 
 export interface UploadResult {
   url: string;
@@ -17,9 +18,33 @@ export interface ImageHost {
   remove?(config: Record<string, unknown>): Promise<string>;
 }
 
-export const IMAGE_HOSTS = ["关闭", "R2", "GitHub", "S3", "Custom"] as const;
+/**
+ * Standalone image-host option: writes into the content-source repository and
+ * reuses its credentials. Existing hosts keep their own parameter sets.
+ */
+export const CONTENT_SOURCE_IMAGE_HOST = "GitHub 内容源";
+export const DEFAULT_IMAGE_DIR = "img-qexo";
+export const DEFAULT_CDN_PRESET = "raw";
 
-export const IMAGE_HOST_PARAMS: Record<string, Record<string, { description: string; placeholder: string }>> = {
+/** `{repo}` is owner/repo, `{branch}` is the content-source branch. */
+export const GITHUB_CDN_PRESETS = [
+  { id: "raw", label: "GitHub 原始 raw（默认）", template: "https://raw.githubusercontent.com/{repo}/{branch}" },
+  { id: "jsdelivr", label: "jsDelivr（国际）", template: "https://cdn.jsdelivr.net/gh/{repo}@{branch}" },
+  { id: "jsdelivr-fastly", label: "jsDelivr Fastly", template: "https://fastly.jsdelivr.net/gh/{repo}@{branch}" },
+  { id: "jsdelivr-gcore", label: "jsDelivr Gcore", template: "https://gcore.jsdelivr.net/gh/{repo}@{branch}" },
+  { id: "statically", label: "Statically", template: "https://cdn.statically.io/gh/{repo}/{branch}" },
+  { id: "gitmirror", label: "GitMirror 镜像", template: "https://raw.gitmirror.com/{repo}/{branch}" },
+];
+
+export const IMAGE_HOSTS = ["关闭", "R2", "GitHub", CONTENT_SOURCE_IMAGE_HOST, "S3", "Custom"] as const;
+
+export interface ImageHostParamDef {
+  description: string;
+  placeholder: string;
+  options?: { value: string; label: string; template?: string }[];
+}
+
+export const IMAGE_HOST_PARAMS: Record<string, Record<string, ImageHostParamDef>> = {
   R2: {
     public_base: { description: "公开访问前缀", placeholder: "留空则使用本站 /api/images/file" },
   },
@@ -29,6 +54,18 @@ export const IMAGE_HOST_PARAMS: Record<string, Record<string, { description: str
     branch: { description: "分支", placeholder: "main" },
     path: { description: "图片目录", placeholder: "source/images" },
     cdn: { description: "访问前缀", placeholder: "https://cdn.jsdelivr.net/gh/user/repo@main" },
+  },
+  [CONTENT_SOURCE_IMAGE_HOST]: {
+    path: { description: "上传目录（内容源仓库根目录下）", placeholder: DEFAULT_IMAGE_DIR },
+    cdn_preset: {
+      description: "访问前缀（公共 CDN）",
+      placeholder: "默认 GitHub 原始 raw",
+      options: GITHUB_CDN_PRESETS.map((p) => ({ value: p.id, label: p.label, template: p.template })),
+    },
+    cdn_custom: {
+      description: "自定义前缀（可选，优先级最高）",
+      placeholder: "https://cdn.example.com/{repo}/{branch}",
+    },
   },
   S3: {
     endpoint: { description: "Endpoint", placeholder: "s3.us-east-1.amazonaws.com" },
@@ -58,6 +95,31 @@ function objectKey(name: string): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const rand = hex(crypto.getRandomValues(new Uint8Array(8)));
   return `images/${yyyy}/${mm}/${rand}${extOf(name)}`;
+}
+
+/** A custom prefix only wins when it is a well-formed http(s) URL without whitespace. */
+export function normalizeCustomPrefix(value: string | undefined): string {
+  const v = String(value || "").trim();
+  if (!v || v.length > 300 || /[\s\u0000-\u001f]/.test(v) || !/^https?:\/\//i.test(v)) return "";
+  try {
+    const u = new URL(v);
+    if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return "";
+  } catch {
+    return "";
+  }
+  return v.replace(/\/+$/, "");
+}
+
+/** Precedence: valid custom prefix > selected preset > GitHub raw. */
+export function resolveImageBase(params: ProviderParams, repo: string, branch: string): string {
+  const chosen = params.cdn_preset || DEFAULT_CDN_PRESET;
+  const preset = GITHUB_CDN_PRESETS.find((p) => p.id === chosen) || GITHUB_CDN_PRESETS[0];
+  const template = normalizeCustomPrefix(params.cdn_custom) || preset.template;
+  return template.replace(/\{repo\}/g, repo).replace(/\{branch\}/g, branch).replace(/\/+$/, "");
+}
+
+export function resolveImageDir(params: ProviderParams): string {
+  return String(params.path || "").trim().replace(/^\/+|\/+$/g, "") || DEFAULT_IMAGE_DIR;
 }
 
 /* ------------------------------------------------------------------ */
@@ -129,6 +191,73 @@ class GitHubHost implements ImageHost {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ message: `Delete ${path} by Qexo`, sha, branch }),
+    });
+    return res.ok ? "已删除远程文件" : `删除失败 ${res.status}`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Content-source GitHub (standalone image-host option)                */
+/* ------------------------------------------------------------------ */
+
+class ContentSourceGitHubHost implements ImageHost {
+  constructor(private params: ProviderParams, private env: Env) {}
+
+  /** Credentials always come from the saved provider, never from this form. */
+  private async source(): Promise<{ token: string; repo: string; branch: string }> {
+    const cfg = await new Store(this.env).getJSON<ProviderConfig>("PROVIDER", { provider: "", params: {} });
+    if (cfg.provider !== "github") throw new HttpError("内容源不是 GitHub，无法使用「GitHub 内容源」图床", 400);
+    const repo = String(cfg.params?.repo || "").trim();
+    const branch = String(cfg.params?.branch || "").trim();
+    const token = String(cfg.params?.token || "").trim();
+    if (!repo || !branch) throw new HttpError("内容源仓库或分支未配置，请先在「设置 → 内容源」保存", 400);
+    if (!token) throw new HttpError("内容源 GitHub 密钥为空，请先在「设置 → 内容源」配置", 400);
+    return { token, repo, branch };
+  }
+
+  private apiBase(): string {
+    return (this.env.GITHUB_API_BASE || "https://api.github.com").replace(/\/+$/, "");
+  }
+
+  private headers(token: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "qexo-workers",
+      "Content-Type": "application/json",
+    };
+  }
+
+  async upload(file: File, bytes: Uint8Array): Promise<UploadResult> {
+    const { token, repo, branch } = await this.source();
+    const key = `${resolveImageDir(this.params)}/${objectKey(file.name)}`;
+    const res = await fetch(`${this.apiBase()}/repos/${repo}/contents/${key}`, {
+      method: "PUT",
+      headers: this.headers(token),
+      body: JSON.stringify({ message: `Upload ${file.name} by Qexo`, content: b64encode(bytes), branch }),
+    });
+    if (!res.ok) throw new HttpError(`GitHub 上传失败 ${res.status}: ${(await res.text()).slice(0, 200)}`, 502);
+    return {
+      url: `${resolveImageBase(this.params, repo, branch)}/${key}`,
+      deleteConfig: { provider: CONTENT_SOURCE_IMAGE_HOST, repo, branch, path: key },
+    };
+  }
+
+  async remove(config: Record<string, unknown>): Promise<string> {
+    const { token } = await this.source();
+    const repo = String(config.repo || "");
+    const branch = String(config.branch || "");
+    const key = String(config.path || "");
+    if (!repo || !key) return "删除信息不完整";
+    const head = await fetch(`${this.apiBase()}/repos/${repo}/contents/${key}?ref=${encodeURIComponent(branch)}`, {
+      headers: this.headers(token),
+    });
+    if (!head.ok) return "远程文件不存在";
+    const meta: any = await head.json();
+    const res = await fetch(`${this.apiBase()}/repos/${repo}/contents/${key}`, {
+      method: "DELETE",
+      headers: this.headers(token),
+      body: JSON.stringify({ message: `Delete ${key} by Qexo`, sha: meta?.sha, branch }),
     });
     return res.ok ? "已删除远程文件" : `删除失败 ${res.status}`;
   }
@@ -234,6 +363,8 @@ export function getImageHost(type: string, params: ProviderParams, env: Env): Im
       return new R2Host(env, params);
     case "GitHub":
       return new GitHubHost(params);
+    case CONTENT_SOURCE_IMAGE_HOST:
+      return new ContentSourceGitHubHost(params, env);
     case "S3":
       return new S3Host(params);
     case "Custom":

@@ -154,7 +154,7 @@ await step("登录并获取 CSRF", async () => {
   const me = await client.get("/api/me");
   assert(me.data?.user?.username === username, "me mismatch");
   assert(me.data.default_admin === true, "default-password warning flag missing");
-  assert(me.data.version === "1.1.1", `unexpected runtime version: ${me.data.version}`);
+  assert(me.data.version === "1.2.0", `unexpected runtime version: ${me.data.version}`);
   client.csrf = me.data.csrf;
   assert(client.csrf, "missing csrf");
   return `session ok, version=${me.data.version}`;

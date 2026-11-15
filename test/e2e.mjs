@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.1.1", "runtime version mismatch");
+  assert.equal(me.data.version, "1.2.0", "runtime version mismatch");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
   return `session + csrf=${csrf.slice(0, 8)}…`;
@@ -391,6 +391,112 @@ await step("images: 列表与删除（同步 R2）", async () => {
   assert.equal(r.data.status, true, JSON.stringify(r.data));
   const after = await api.get("/api/images");
   assert.equal(after.data.data.length, 0);
+});
+
+/* ---------------- content-source image host ---------------- */
+
+const CS_IMAGE_HOST = "GitHub 内容源";
+const MOCK_TOKEN = "mock-token";
+const csUploaded = [];
+
+/** The mock rejects unauthenticated reads, so pass the content-source token. */
+async function remoteStatus(pathInRepo) {
+  const res = await fetch(`${servers.mock}/repos/demo/blog/contents/${pathInRepo}`, {
+    headers: { Authorization: `Bearer ${MOCK_TOKEN}` },
+  });
+  return res.status;
+}
+
+async function setImageHost(type, params) {
+  const r = await api.post("/api/settings/image_host", { image_host: JSON.stringify({ type, params }) });
+  assert.equal(r.data.status, true, JSON.stringify(r.data));
+}
+
+async function uploadPng(name) {
+  const form = new FormData();
+  form.append("file", new Blob([PNG], { type: "image/png" }), name);
+  const r = await api.req("/api/upload", { method: "POST", form });
+  assert.equal(r.data.status, true, JSON.stringify(r.data));
+  // IDs are unique; timestamps can collide when several uploads share a second.
+  csUploaded.push(r.data.data.id);
+  return r.data;
+}
+
+await step("images: 内容源图床是独立类型且预设可枚举", async () => {
+  const s = await api.get("/api/settings");
+  const names = (s.data.image_hosts || []).map((h) => h.name);
+  assert.ok(names.includes(CS_IMAGE_HOST), names.join(","));
+  const meta = s.data.image_hosts.find((h) => h.name === CS_IMAGE_HOST);
+  const ids = (meta.params.cdn_preset.options || []).map((o) => o.value);
+  assert.ok(ids.includes("raw") && ids.includes("jsdelivr"), ids.join(","));
+  assert.ok(meta.params.cdn_preset.options[0].template.includes("{repo}"));
+  assert.ok(!("token" in meta.params), "该类型不应要求单独填写密钥");
+  return `${names.length} 种图床 / ${ids.length} 个 CDN 预设`;
+});
+
+await step("images: 默认 raw 前缀与 img-qexo 上传目录", async () => {
+  await setImageHost(CS_IMAGE_HOST, {});
+  const saved = await api.get("/api/settings");
+  const stored = JSON.parse(saved.data.settings.IMG_HOST);
+  assert.equal(stored.type, CS_IMAGE_HOST);
+  assert.ok(!("token" in (stored.params || {})), "图床配置不应另存密钥");
+  const r = await uploadPng("default.png");
+  // The mock requires `Bearer mock-token`; a successful upload proves the
+  // content-source credential was reused instead of an empty form token.
+  assert.ok(r.url.startsWith("https://raw.githubusercontent.com/demo/blog/main/img-qexo/"), r.url);
+  const key = r.url.split("/img-qexo/")[1];
+  assert.ok(key, r.url);
+  assert.equal(await remoteStatus(`img-qexo/${key}`), 200, "远程文件未写入内容源仓库");
+  return r.url;
+});
+
+await step("images: 下拉预设覆盖默认前缀", async () => {
+  await setImageHost(CS_IMAGE_HOST, { cdn_preset: "jsdelivr" });
+  const r = await uploadPng("preset.png");
+  assert.ok(r.url.startsWith("https://cdn.jsdelivr.net/gh/demo/blog@main/img-qexo/"), r.url);
+  return r.url;
+});
+
+await step("images: 合法自定义前缀优先级最高", async () => {
+  await setImageHost(CS_IMAGE_HOST, {
+    cdn_preset: "jsdelivr",
+    cdn_custom: "https://img.example.com/{repo}/{branch}/",
+  });
+  const r = await uploadPng("custom.png");
+  assert.ok(r.url.startsWith("https://img.example.com/demo/blog/main/img-qexo/"), r.url);
+  return r.url;
+});
+
+await step("images: 非法自定义前缀回退到下拉预设", async () => {
+  await setImageHost(CS_IMAGE_HOST, { cdn_preset: "jsdelivr", cdn_custom: "javascript:alert(1)" });
+  const r = await uploadPng("fallback.png");
+  assert.ok(r.url.startsWith("https://cdn.jsdelivr.net/gh/demo/blog@main/img-qexo/"), r.url);
+  return r.url;
+});
+
+await step("images: 上传目录可覆盖且删除同步生效", async () => {
+  await setImageHost(CS_IMAGE_HOST, { path: "custom-images", cdn_preset: "raw" });
+  const r = await uploadPng("folder.png");
+  assert.ok(r.url.includes("/custom-images/images/"), r.url);
+  const key = r.url.split("/demo/blog/main/")[1];
+  assert.ok(key, r.url);
+  assert.equal(await remoteStatus(key), 200);
+  const imageId = r.data.id;
+  const del = await api.post("/api/delete_img", { image: imageId, sync: "true" });
+  assert.equal(del.data.status, true, JSON.stringify(del.data));
+  assert.ok(!String(del.data.msg || "").includes("远程删除失败"), JSON.stringify(del.data));
+  assert.equal(await remoteStatus(key), 404, `同步删除未生效: ${JSON.stringify(del.data)}`);
+  const idx = csUploaded.indexOf(imageId);
+  if (idx >= 0) csUploaded.splice(idx, 1);
+  return key;
+});
+
+await step("images: 清理内容源图床测试记录并恢复原图床", async () => {
+  for (const t of csUploaded) await api.post("/api/delete_img", { image: t, sync: "true" });
+  const list = await api.get("/api/images");
+  assert.equal(list.data.data.length, 0, JSON.stringify(list.data.data));
+  await setImageHost("R2", {});
+  return `${csUploaded.length} 条记录已清理`;
 });
 
 /* ---------------- friends & talks ---------------- */
@@ -757,7 +863,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.1.1",
+    appVersion: "1.2.0",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

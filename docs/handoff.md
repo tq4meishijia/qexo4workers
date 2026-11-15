@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.1.1** |
+| 项目版本 | **1.2.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -257,4 +257,20 @@
 - **变更记录**：新建 `CHANGELOG.md`，声明语义化版本规则并登记本版本变更。
 - **验证**：`npm test` 58/58、`npm run test:ui` 18/18、`browser-qa.mjs` 49/49、`tsc --noEmit` 与 `deploy:dry` 通过（详见 §9）。
 - **发布**：提交并推送 `main`，附注标签 `v1.1.1`；线上 Worker 未部署，部署与线上复验仍为后续项。
+
+---
+
+## 11. v1.2.0 发布（2026-11-15）
+
+- **类型**：`MINOR`（新增独立图床类型），由 `v1.1.1` 递增。
+- **需求**：新增「GitHub 内容源」图床类型；默认以内容源仓库/分支根目录 `img-qexo` 为上传目录，密钥复用内容源配置，访问前缀默认 GitHub 原始 raw，提供公共 GitHub CDN 下拉与自定义前缀（合法时优先级最高），且不改动其他图床类型。
+- **实现**：
+  - `src/images.ts`：新增 `CONTENT_SOURCE_IMAGE_HOST` / `DEFAULT_IMAGE_DIR` / `GITHUB_CDN_PRESETS`、前缀与目录解析函数、`ContentSourceGitHubHost`；`IMAGE_HOSTS` 与参数 schema 增加独立项，既有五种类型参数不变。
+  - `src/ui/js/settings.js`：仅新类型走定制表单（上传目录、CDN 下拉、自定义前缀、实时预览与合法性提示），其他类型继续用通用 `paramsFields()`。
+  - 上传与同步删除通过 `Store` 读取 `PROVIDER`，请求走 `env.GITHUB_API_BASE`（本地指向 mock）；`deleteConfig` 不保存密钥。
+- **测试**：`test/e2e.mjs` 新增 7 例（类型枚举、默认 raw + `img-qexo`、下拉覆盖、自定义优先、非法回退、目录覆盖与同步删除、清理恢复）；`test/ui-smoke.mjs` 新增 1 例（下拉/预览/优先级/保存回填）。
+- **文档**：`README.md`、`docs/deploy.md`、`CHANGELOG.md` 同步。
+- **版本字段**：与 §10 同一份清单，同步为 `1.2.0`。
+- **验证**：`npm test` 65/65、`npm run test:ui` 19/19、`node test/browser-qa.mjs` 49/49、`npx tsc --noEmit` 通过、`npm run deploy:dry` 通过。
+- **发布**：提交并推送 `main`，附注标签 `v1.2.0`；线上 Worker 未部署，部署与线上复验仍为后续项。
 

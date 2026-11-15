@@ -47,7 +47,7 @@ npx wrangler secret put SESSION_SECRET
 # 输入：至少 32 字节随机串，例如 openssl rand -hex 32 的输出
 ```
 
-Provider 的 GitHub Token、图床密钥不放在环境变量里，而是登录后台后在「设置 → 内容源 / 图床」填写，加密边界由 Cloudflare 账号与 D1 访问控制保证。
+Provider 的 GitHub Token、图床密钥不放在环境变量里，而是登录后台后在「设置 → 内容源 / 图床」填写，加密边界由 Cloudflare 账号与 D1 访问控制保证。「GitHub 内容源」图床不另填密钥：它直接复用内容源的 token / 仓库 / 分支，默认上传目录为仓库根目录下的 `img-qexo`，访问前缀默认 GitHub 原始 raw，可在配置页下拉切换 jsDelivr 等公共 CDN，或用合法的自定义 http(s) 前缀覆盖（非法值自动回退下拉）。
 
 ## 4. 部署 Worker
 
