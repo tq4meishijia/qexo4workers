@@ -572,38 +572,42 @@ await check("H2", "PAT 链接", "打开设置/内容源，检查 Fine-grained PA
   return `contents=${u.searchParams.get("contents")}，expires_in=${u.searchParams.get("expires_in")}`;
 });
 
-await check("H3", "内容源默认留空", "检查仓库/分支下拉与手输框的初始值", "四处均为空，已保存值仅以只读说明展示", async () => {
-  assert.equal(await page.inputValue("#gh-repo"), "");
-  assert.equal(await page.inputValue("#gh-branch"), "");
+await check("H3", "内容源已保存值回填", "检查仓库/分支下拉与手输框的初始值", "下拉显示并选中已保存仓库/分支，手输框保持为空", async () => {
+  assert.equal(await page.inputValue("#gh-repo"), "demo/blog");
+  assert.equal(await page.inputValue("#gh-branch"), "main");
   assert.equal(await page.inputValue("#gh-repo-manual-input"), "");
   assert.equal(await page.inputValue("#gh-branch-manual-input"), "");
   const saved = (await page.textContent("#gh-saved-info")) || "";
-  assert.ok(saved.includes("当前已保存") && saved.includes("默认留空"), saved);
-  return "4 处空值 + 只读已保存说明";
+  assert.ok(saved.includes("当前已保存") && saved.includes("已自动回填"), saved);
+  return "2 处回填 + 2 处空手输框";
 });
 
-await check("H4", "空值保存边界", "保持仓库/分支为空，点「保存内容源」", "明确提示仓库为空，不误报校验通过、不回填旧值", async () => {
+await check("H4", "空值保存边界", "清空分支后点「保存内容源」", "明确提示分支为空，不误报校验通过、不回填旧值", async () => {
+  await page.selectOption("#gh-branch", "");
   await page.click("#save-provider");
   await page.waitForTimeout(600);
   const msg = (await page.textContent("#prov-msg")) || "";
-  assert.ok(msg.includes("仓库为空"), msg);
+  assert.ok(msg.includes("分支为空"), msg);
   assert.ok(!msg.includes("校验通过"), msg);
+  await page.selectOption("#gh-branch", "main");
   return msg.trim().slice(0, 60);
 });
 
-await check("H5", "密钥检测", "等待自动探测，检查仓库/分支列表加载后的选中状态", "选项加载但不自动选中；手动选择后刷新保持不变", async () => {
+await check("H5", "密钥检测", "等待自动探测，检查仓库/分支列表加载后的选中状态", "已保存值在列表刷新后保持不变，可直接保存", async () => {
   await page.waitForFunction(() => document.getElementById("gh-repo-status")?.classList.contains("ok"), null, { timeout: 20000 });
+  await page.waitForFunction(() => document.getElementById("gh-branch-status")?.classList.contains("ok"), null, { timeout: 20000 });
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("#gh-branch option")).some((o) => o.value === "dev"), null, { timeout: 20000 });
   const repos = await page.$$eval("#gh-repo option", (els) => els.map((e) => e.value).filter(Boolean));
   assert.ok(repos.includes("demo/blog"), repos.join(","));
-  assert.equal(await page.inputValue("#gh-repo"), "", "加载后自动选中了仓库");
-  await page.selectOption("#gh-repo", "demo/blog");
-  await page.waitForFunction(() => document.getElementById("gh-branch-status")?.classList.contains("ok"), null, { timeout: 20000 });
-  assert.equal(await page.inputValue("#gh-branch"), "", "自动选中了默认分支");
-  await page.selectOption("#gh-branch", "main");
+  assert.equal(await page.inputValue("#gh-repo"), "demo/blog", "列表加载后丢失了已保存仓库");
+  const branches = await page.$$eval("#gh-branch option", (els) => els.map((e) => e.value).filter(Boolean));
+  assert.ok(branches.includes("main") && branches.includes("dev"), branches.join(","));
+  assert.equal(await page.inputValue("#gh-branch"), "main", "列表加载后丢失了已保存分支");
   await page.click("#gh-repos-refresh");
   await page.waitForTimeout(1200);
   assert.equal(await page.inputValue("#gh-repo"), "demo/blog");
-  return `${repos.length} 个仓库，需手动选择`;
+  assert.equal(await page.inputValue("#gh-branch"), "main");
+  return `${repos.length} 个仓库 / ${branches.length} 个分支，刷新保持回填`;
 });
 
 await check("H6", "无效密钥", "填入 bad-token 并点「检测密钥」", "token 与仓库状态均显示红色错误，含 401 原因", async () => {

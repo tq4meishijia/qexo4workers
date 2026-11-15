@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.1.0** |
+| 项目版本 | **1.1.1** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -54,7 +54,7 @@
 | S5 MCP 接入 | ✅ 完成 | `src/mcp.ts`（18 工具）、`mcp/stdio-bridge.mjs`、`docs/mcp.md`、后台 `#/mcp` 页 |
 | S6 线上部署 | ✅ 完成 | D1 `qexo`、KV `qexo-cache`、Worker 部署与线上冒烟 |
 | S7 登录与默认账号 | ✅ 完成 | 自动建号、服务端 302 守卫、默认密码警示条 |
-| S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、默认留空语义 |
+| S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、已保存值回填与空值拦截 |
 | S9 文档与仓库化 | ✅ 完成 | README / handoff / 架构图 / 截图资源 / GitHub 仓库 |
 | S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 与版本断言均为 `1.1.0` |
 | S11 Agent 一键接入提示词 | ✅ 完成 | `src/ui/js/mcp-prompt.js` 纯函数 + 创建令牌弹窗自动生成 / 复制 + 结构规范文档 |
@@ -94,7 +94,7 @@
 | `src/auth.ts` | PBKDF2-SHA256 100k、HMAC Cookie、CSRF 双提交、限流、reCAPTCHA |
 | `src/mcp.ts` | Streamable HTTP、18 工具、资源/提示词、SHA-256 令牌与作用域 |
 | `src/ui/js/mcp-prompt.js` | 与 DOM 解耦的提示词生成器：固定 6 段结构、11 项必备要素、令牌仅出现两次、HTTP/stdio/纯 HTTP 三套适配方案；Node 可直接单测 |
-| `src/ui/js/provider-form.js` | PAT 链接、密钥检测、仓库/分支下拉、默认留空与空值拦截（初始化向导与设置页复用） |
+| `src/ui/js/provider-form.js` | PAT 链接、密钥检测、仓库/分支下拉、已保存值回填与空值拦截（初始化向导与设置页复用） |
 | `src/api-app.ts` | 管理 API；`mergeSecrets` 只合并凭据字段，空 repo/branch 不回填 |
 
 ### 2.5 重要设计决策
@@ -107,7 +107,7 @@
 | MCP 令牌与登录会话分离 | Agent 使用独立可吊销凭据，不共享管理员 Cookie | 高 |
 | 工具级越权返回 `isError` 而非 JSON-RPC error | 模型能读懂原因并向用户解释 | 高 |
 | 页面守卫放在 Worker（`run_worker_first`） | 未登录 302 前不下发 SPA 空壳，避免"先加载再跳" | 高 |
-| 内容源表单默认留空 | 避免用户误以为旧值已填写；空值由前后端明确拦截 | 高 |
+| 内容源表单回填已保存值 | 重开配置页应显示当前仓库与分支；清空字段仍由前后端明确拦截，避免静默沿用旧值 | 高 |
 | PAT 默认指向 Fine-grained 创建页 | 最小权限：单仓库 + 逐项权限 + 90 天过期 | 高 |
 
 ---
@@ -230,4 +230,31 @@
 - **版本字段**：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章／版本表／页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值、`test/e2e.mjs`（2 处）、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言，全部同步为 `1.1.0`。历史报告与 `test/fixture/repo/package.json` 的基线版本按原样保留。
 - **验证**：`npm test` 58/58、`npm run test:ui` 17/17、`test/browser-qa.mjs` 49/49、`npm run deploy:dry` 通过。
 - **发布**：提交推送至 `main`，附注标签 `v1.1.0`；执行 `npm run deploy` 部署 Worker，关闭 §7 遗留的部署待办。
+
+---
+
+## 9. 内容源已保存值回填修复（2026-11-15）
+
+- **现象**：配置好内容源后再次打开「设置 → 内容源」，仓库与分支下拉只显示占位项；已保存的仓库/分支仅以一行灰色说明出现，控件中看不到当前内容源。
+- **根因**：`src/ui/js/provider-form.js` 把「默认留空」写成硬编码（初始 `repoOptions([], "")` 与空分支下拉），`applyRepos()` 明确禁止加载选项时填充字段。后端 `/api/settings` 已返回未掩码的 repo / branch（只掩码 token 类字段），数据链路无缺口，属纯前端回填缺失。
+- **改动**：
+  - `src/ui/js/provider-form.js`：已保存值作为真实 option 渲染并选中（标注「当前配置」）；列表刷新保留选中；密钥有效时自动载入该仓库的完整分支列表并保留当前分支；显式切换仓库清空旧分支，用请求序号丢弃过期分支响应；说明文字改为「已自动回填，可直接保存」。
+  - `src/ui/js/settings.js`：切换仓库类型后切回已配置类型时恢复已保存值，切到其它类型仍从空表单开始。
+  - `src/api-app.ts`：仅修正 `saveProvider` 中「表单从不预填」的过时注释。空 repo/branch 仍由前后端明确拒绝，token 仍由 `mergeSecrets` 保留，安全语义未变。
+  - 测试：`test/ui-smoke.mjs`、`test/browser-qa.mjs`、`test/prod-ui.mjs` 相应断言改为「回填 + 刷新保持 + 切换仓库清空分支」，保留空值保存拦截覆盖。
+  - 文档：`README.md`、`docs/deploy.md`、本文件 §2.4 / §2.5 同步；`docs/test-report.md` §10 与 `docs/ego-browser-test-report.md` §11.4 追加历史注记，历史验收数字不改。
+- **验证**：`npm test` 58/58、`npm run test:ui` 18/18、`node test/browser-qa.mjs` 49/49、`npx tsc --noEmit` 通过、`npm run deploy:dry` 通过（470.85 KiB / gzip 100.11 KiB）。
+- **发布**：本修复随 `v1.1.1` 提交推送（见 §10）。
+- **未竟事项**：线上 Worker 仍为旧版，部署后需跑 `npm run test:prod` 与 `node test/prod-ui.mjs` 复验（后者断言已同步为新行为）。`docs/assets/ui-settings.png` 仍是旧版截图，本轮未重新采集。
+
+---
+
+## 10. v1.1.1 发布（2026-11-15）
+
+- **类型**：`PATCH`（问题修复 + 小功能更新），由 `v1.1.0` 递增。按用户确立的语义化版本规则，每次代码变更对应一个版本、一条变更记录、一次提交与同名附注标签。
+- **内容**：内容源已保存值回填修复（见 §9）、分支状态提示修正、按钮与面板风格库细节打磨，以及测试与文档同步。
+- **版本字段**：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章/版本表/页脚、`mcp-prompt.js` 与 `mcp.js` 回退值、`test/e2e.mjs`（2 处）、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 断言，全部同步为 `1.1.1`；`package-lock.json` 中依赖自身的 `1.1.0` 与历史版本记录不改。
+- **变更记录**：新建 `CHANGELOG.md`，声明语义化版本规则并登记本版本变更。
+- **验证**：`npm test` 58/58、`npm run test:ui` 18/18、`browser-qa.mjs` 49/49、`tsc --noEmit` 与 `deploy:dry` 通过（详见 §9）。
+- **发布**：提交并推送 `main`，附注标签 `v1.1.1`；线上 Worker 未部署，部署与线上复验仍为后续项。
 

@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.1.0-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.1.1-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.1.0**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.1.1**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -120,7 +120,7 @@ sequenceDiagram
 |:---:|:---:|
 | ![控制台](docs/assets/ui-dashboard.png) | ![编辑器](docs/assets/ui-editor.png) |
 
-| 内容源配置（默认留空） | MCP 接入页 |
+| 内容源配置 | MCP 接入页 |
 |:---:|:---:|
 | ![内容源](docs/assets/ui-settings.png) | ![MCP](docs/assets/ui-mcp.png) |
 
@@ -200,7 +200,7 @@ node test/prod-ui.mjs   # 线上浏览器冒烟
 | 仓库类型 | `github` / `gitlab` / `gitea` / `r2` |
 | 博客平台 | `Hexo`（默认）/ `Hugo` / `Valaxy` / `VuePress` / `VitePress` / `Nuxt` / `Astro` |
 | token | Fine-grained PAT；最小权限为 `Contents: Read and write` + 自动的 `Metadata: Read` |
-| repo / branch | **默认留空**，占位标注「必填 / 待选择」；已保存值以只读说明单独展示，不预填 |
+| repo / branch | **自动回填已保存值**：重开配置页即可看到当前仓库与分支；未配置时保持「必填 / 待选择」占位，清空后保存仍被前后端拦截 |
 | path | 博客在仓库子目录时填写，例如 `blog` |
 
 > 最小权限：令牌仅覆盖一个仓库，泄露时无法读取其它私有仓库，且 90 天后失效。仅在启用自动 WebHook 时加 `Webhooks`，仅在 Actions 部署时加 `Actions`；不要改用 classic token 的 `repo` scope。
@@ -307,7 +307,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 套件 | 命令 | 结果 |
 |---|---|---|
 | API 端到端 | `npm test` | **58/58** |
-| 浏览器 UI | `npm run test:ui` | **17/17**（含风格切换 / Cookie 恢复 / 无效值回退） |
+| 浏览器 UI | `npm run test:ui` | **18/18**（含按钮组件规范 / 风格切换 / Cookie 恢复 / 无效值回退） |
 | 线上 API 冒烟 | `QEXO_BASE_URL=<部署地址> npm run test:prod` | **15/15**（0 跳过） |
 | 线上浏览器 | `QEXO_BASE_URL=<部署地址> node test/prod-ui.mjs` | **7/7** |
 | 生产构建 | `npm run deploy:dry` | 470.85 KiB / gzip 100.11 KiB |
@@ -332,7 +332,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 5 | 平台不可行项 | 本地磁盘 Provider → R2；FTP / 又拍 / Doge 图床（需 TCP）、云端 Python 脚本执行无对应能力，见迁移矩阵 |
 | 6 | 密钥保管 | 线上凭据文件（`test/out/deploy-credentials.txt`）已被 `.gitignore` 忽略，切勿提交；生产 Secret 用 `wrangler secret put` 管理 |
 | 7 | MCP 协议版本 | 以 2025-06-18 握手为基线，兼容 2025-03-26 / 2024-11-05；2026-07-28 的 `_meta` 新模型未实现 |
-| 8 | 默认空值语义 | 内容源表单的仓库与分支不预填任何值，空值保存会被前后端明确拦截，不会静默沿用旧配置 |
+| 8 | 已保存值回填与空值拦截 | 内容源表单自动回填已保存的仓库与分支；清空任一字段后保存会被前后端明确拦截，不会静默沿用旧配置 |
 | 9 | 免费额度 | 按日更 1–3 篇、日均 PV 5,000 估算余量 10 倍以上；瓶颈是 Pages 500 次构建/月，见 `docs/quota-analysis.md` |
 | 10 | 生产配置含资源 ID | `wrangler.prod.toml` 带当前账号的 D1 / KV 标识，fork 后请替换成自己的；该文件**不含任何凭据**，`SESSION_SECRET` 与 PAT 均不入库 |
 
@@ -359,4 +359,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.1.0** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.1.1** · 2026-11

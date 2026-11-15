@@ -307,8 +307,9 @@ export async function saveProvider(
   const prev = await store.getJSON<any>("PROVIDER", { params: {} });
   cfg.params = mergeSecrets(cfg.params, prev?.params || {});
 
-  // The form never prefills these two fields. An empty value is an explicit
-  // "not chosen" state, not a valid value and not a request to keep the old one.
+  // The form prefills both fields from the saved config. An empty value is
+  // still an explicit "not chosen" state, not a valid value and not a request
+  // to keep the old one.
   if (cfg.provider === "github") {
     if (!String(cfg.params.repo || "").trim()) {
       return { ok: false, msg: "GitHub 仓库为空：请明确选择仓库后再保存，未写入任何配置" };

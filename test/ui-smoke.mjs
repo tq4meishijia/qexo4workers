@@ -129,7 +129,7 @@ await step("ui: 设置页加载内容源配置", async () => {
   return `${value} / ${platform}`;
 });
 
-await step("ui: Fine-grained PAT 链接与空值默认", async () => {
+await step("ui: Fine-grained PAT 链接与已保存值回填", async () => {
   const href = await page.getAttribute("#gh-pat-link", "href");
   assert.ok(href.startsWith("https://github.com/settings/personal-access-tokens/new?"), href);
   const target = new URL(href);
@@ -153,48 +153,49 @@ await step("ui: Fine-grained PAT 链接与空值默认", async () => {
 
   assert.equal(await page.evaluate(() => document.getElementById("gh-repo")?.tagName), "SELECT");
   assert.equal(await page.evaluate(() => document.getElementById("gh-branch")?.tagName), "SELECT");
-  assert.equal(await page.inputValue("#gh-repo"), "");
-  assert.equal(await page.inputValue("#gh-branch"), "");
+  assert.equal(await page.inputValue("#gh-repo"), "demo/blog");
+  assert.equal(await page.inputValue("#gh-branch"), "main");
   assert.equal(await page.inputValue("#gh-repo-manual-input"), "");
   assert.equal(await page.inputValue("#gh-branch-manual-input"), "");
   const repoPlaceholder = (await page.textContent('#gh-repo option[value=""]')) || "";
   assert.ok(repoPlaceholder.includes("请选择") && repoPlaceholder.includes("必填"), repoPlaceholder);
   const branchPlaceholder = (await page.textContent('#gh-branch option[value=""]')) || "";
-  assert.ok(branchPlaceholder.includes("待选择"), branchPlaceholder);
+  assert.ok(branchPlaceholder.includes("请选择") && branchPlaceholder.includes("必填"), branchPlaceholder);
   const saved = (await page.textContent("#gh-saved-info")) || "";
-  assert.ok(saved.includes("当前已保存") && saved.includes("默认留空"), saved);
+  assert.ok(saved.includes("当前已保存") && saved.includes("已自动回填"), saved);
 
-  // Empty state must not be reported as a valid/verified configuration.
+  // Clearing a picker is still an explicit "not chosen" state: saving must be
+  // rejected instead of silently resurrecting the stored value.
+  await page.selectOption("#gh-branch", "");
   await page.click("#save-provider");
   const msg = (await page.textContent("#prov-msg")) || "";
-  assert.ok(msg.includes("仓库为空"), msg);
+  assert.ok(msg.includes("分支为空"), msg);
   assert.ok(!msg.includes("校验通过"), msg);
+  await page.selectOption("#gh-branch", "main");
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ path: "test/out/ui-settings.png", fullPage: true });
-  return "empty defaults + explicit empty-state message";
+  return "saved values prefilled + empty branch rejected";
 });
 
-await step("ui: 仓库/分支需明确选择", async () => {
+await step("ui: 仓库/分支回填与刷新保持", async () => {
   await page.waitForFunction(
     () => document.getElementById("gh-repo-status")?.classList.contains("ok"),
+    { timeout: 20000 },
+  );
+  await page.waitForFunction(
+    () => document.getElementById("gh-branch-status")?.classList.contains("ok"),
     { timeout: 20000 },
   );
   const repos = await page.$$eval("#gh-repo option", (els) => els.map((e) => e.value).filter(Boolean));
   assert.ok(repos.includes("demo/blog"), repos.join(","));
   assert.ok(repos.includes("demo/notes"), repos.join(","));
-  assert.equal(await page.inputValue("#gh-repo"), "", "loading options must not select a repo");
+  assert.equal(await page.inputValue("#gh-repo"), "demo/blog", "repo list must keep the saved selection");
 
-  await page.selectOption("#gh-repo", "demo/blog");
-  await page.waitForFunction(
-    () => document.getElementById("gh-branch-status")?.classList.contains("ok"),
-    { timeout: 20000 },
-  );
   const branches = await page.$$eval("#gh-branch option", (els) => els.map((e) => e.value).filter(Boolean));
   assert.ok(branches.includes("main"), branches.join(","));
   assert.ok(branches.includes("dev"), branches.join(","));
-  assert.equal(await page.inputValue("#gh-branch"), "", "default branch must not be auto-selected");
-  await page.selectOption("#gh-branch", "main");
+  assert.equal(await page.inputValue("#gh-branch"), "main", "branch list must keep the saved selection");
 
   await page.click("#gh-repos-refresh");
   await page.waitForTimeout(1200);
@@ -204,6 +205,22 @@ await step("ui: 仓库/分支需明确选择", async () => {
   );
   assert.equal(await page.inputValue("#gh-repo"), "demo/blog");
   assert.equal(await page.inputValue("#gh-branch"), "main");
+
+  // A different repository has a different branch set: the old branch must not
+  // be carried over silently.
+  await page.selectOption("#gh-repo", "demo/notes");
+  await page.waitForFunction(
+    () => Array.from(document.querySelectorAll("#gh-branch option")).some((o) => o.value === "trunk"),
+    { timeout: 20000 },
+  );
+  assert.equal(await page.inputValue("#gh-branch"), "", "repo switch must clear the branch");
+  await page.selectOption("#gh-repo", "demo/blog");
+  await page.waitForFunction(
+    () => Array.from(document.querySelectorAll("#gh-branch option")).some((o) => o.value === "dev"),
+    { timeout: 20000 },
+  );
+  await page.selectOption("#gh-branch", "main");
+
   // Remove the earlier empty-state notice/toast so the screenshot only shows
   // the explicit-selection state.
   await page.evaluate(() => {
@@ -213,7 +230,7 @@ await step("ui: 仓库/分支需明确选择", async () => {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
   await page.screenshot({ path: "test/out/ui-settings-loaded.png", fullPage: true });
-  return `${repos.length} repos, ${branches.length} branches, explicit selection`;
+  return `${repos.length} repos, ${branches.length} branches, prefilled + refresh-safe`;
 });
 
 await step("ui: 无效密钥显示明确错误", async () => {
@@ -292,6 +309,77 @@ await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
   await page.waitForTimeout(250);
   await page.screenshot({ path: "test/out/ui-mcp.png", fullPage: true });
   return `prompt ${prompt.length} chars, ${(prompt.match(/^## /gm) || []).length} sections`;
+});
+
+await step("ui: 按钮组件规范与状态反馈", async () => {
+  await page.goto(base + "/#/settings/provider", { waitUntil: "networkidle" });
+  await page.waitForSelector("#save-provider");
+  const spec = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById("save-provider"));
+    const menu = document.getElementById("menu-toggle");
+    return {
+      height: cs.height, gap: cs.columnGap, pad: cs.paddingLeft, radius: cs.borderRadius,
+      heights: [...new Set([...document.querySelectorAll(".btn")]
+        .filter((e) => e.getClientRects().length > 0)
+        .map((e) => Math.round(e.getBoundingClientRect().height)))].sort((a, b) => a - b),
+      dur: cs.transitionDuration,
+      easeCount: new Set(cs.transitionTimingFunction.match(/(?:cubic-bezier\([^)]*\)|ease(?:-in|-out|-in-out)?|linear)/g) || []).size,
+      props: cs.transitionProperty, restBg: cs.backgroundColor,
+      menuSvg: !!menu.querySelector("svg"), menuText: menu.textContent.trim(),
+    };
+  });
+  assert.equal(spec.height, "36px", "基准按钮高度");
+  assert.equal(spec.gap, "8px", "图标与文字间距");
+  assert.equal(spec.pad, "14px", "水平内边距");
+  assert.ok(spec.heights.every((h) => h === 36 || h === 28), `按钮高度集合 ${spec.heights}`);
+  assert.ok(spec.dur.includes("0.14s") && spec.dur.includes("0.09s"), spec.dur);
+  assert.equal(spec.easeCount, 1, "应只使用一条缓动曲线");
+  assert.ok(!spec.props.split(",").map((s) => s.trim()).includes("all"), "禁止 transition: all");
+  assert.equal(spec.menuSvg, true, "菜单按钮应使用线性图标");
+  assert.equal(spec.menuText, "", "菜单按钮不应残留字符图标");
+
+  // 键盘聚焦：2px 强调色轮廓
+  await page.keyboard.press("Tab");
+  await page.locator("#save-provider").focus();
+  const focus = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById("save-provider"));
+    return { w: cs.outlineWidth, c: cs.outlineColor };
+  });
+  assert.equal(focus.w, "2px", focus.c);
+
+  // 按下：1px 下沉
+  const box = await page.locator("#save-provider").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(160);
+  const active = await page.evaluate(() => getComputedStyle(document.getElementById("save-provider")).transform);
+  await page.mouse.up();
+  assert.ok(active.includes("matrix(1, 0, 0, 1, 0, 1)"), active);
+
+  // 禁用：无位移、悬停不改变背景
+  await page.evaluate(() => { document.getElementById("save-provider").disabled = true; });
+  await page.hover("#save-provider");
+  await page.waitForTimeout(180);
+  const disabled = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById("save-provider"));
+    return { tf: cs.transform, bg: cs.backgroundColor, op: cs.opacity };
+  });
+  await page.evaluate(() => { document.getElementById("save-provider").disabled = false; });
+  assert.equal(disabled.tf, "none");
+  assert.equal(disabled.bg, spec.restBg, "禁用态悬停不应改变背景");
+  assert.equal(disabled.op, "0.5");
+
+  // 圆角随主题换档
+  const radii = {};
+  for (const id of ["midnight", "eink"]) {
+    await page.evaluate((x) => window.QexoStyles.apply(x), id);
+    await page.waitForTimeout(240);
+    radii[id] = await page.evaluate(() => getComputedStyle(document.getElementById("save-provider")).borderRadius);
+  }
+  await page.evaluate(() => window.QexoStyles.apply("midnight"));
+  assert.equal(radii.midnight, "8px", radii.midnight);
+  assert.equal(radii.eink, "0px", radii.eink);
+  return `36/28px · 8px/0px 主题圆角 · 140/90ms 单一缓动 · 焦点/按下/禁用已覆盖`;
 });
 
 /* ------------------------------------------------------------------ */

@@ -161,3 +161,9 @@ node test/ui-smoke.mjs # 浏览器 UI 冒烟（需本机 Edge）
 4. 未验证真实 Cloudflare 账号的 D1/R2/Pages 绑定，绑定步骤见 `docs/deploy.md`。
 5. Passkey 登录未在应用层实现，替代方案为 Cloudflare Access（见迁移矩阵 #4）。
 6. MCP 以 2025-06-18 握手为基线；2026-07-28 的 `_meta` 元数据模型未实现，SSE 服务端推送未启用（POST 返回 JSON，GET 返回 405）。
+
+---
+
+## 10. 后续修订注记（2026-11-15）
+
+内容源表单的「默认留空」语义已改为「自动回填已保存的仓库与分支」。上文 §8 描述旧行为的文字保留为当时的验收记录，不代表当前实现。改动清单与回归结果见 `docs/handoff.md` §9；线上 Worker 需重新部署后再用 `node test/prod-ui.mjs` 复验。

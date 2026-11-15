@@ -60,7 +60,7 @@ await step("登录并进入控制台", async () => {
   await page.waitForSelector(".stat");
   const pill = await page.textContent("#provider-pill");
   const version = (await page.textContent("#version")) || "";
-  if (!version.includes("1.1.0")) throw new Error(`unexpected UI version: ${version}`);
+  if (!version.includes("1.1.1")) throw new Error(`unexpected UI version: ${version}`);
   return `${pill.trim()} · ${version.trim()}`;
 });
 
@@ -89,12 +89,19 @@ await step("内容源表单：PAT 链接与下拉", async () => {
     branch: document.getElementById("gh-branch")?.tagName,
   }));
   if (tags.repo !== "SELECT" || tags.branch !== "SELECT") throw new Error(JSON.stringify(tags));
-  if ((await page.inputValue("#gh-repo")) !== "") throw new Error("repo must default to empty");
-  if ((await page.inputValue("#gh-branch")) !== "") throw new Error("branch must default to empty");
+  const savedRepo = await page.inputValue("#gh-repo");
+  const savedBranch = await page.inputValue("#gh-branch");
+  const hasSavedInfo = !!(await page.$("#gh-saved-info"));
+  if (hasSavedInfo) {
+    if (!savedRepo.includes("/")) throw new Error(`saved repo not prefilled: ${savedRepo}`);
+    if (!savedBranch) throw new Error("saved branch not prefilled");
+    const saved = (await page.textContent("#gh-saved-info")) || "";
+    if (!saved.includes("已自动回填")) throw new Error(`saved info=${saved}`);
+  } else if (savedRepo || savedBranch) {
+    throw new Error("unexpected prefilled values without saved info");
+  }
   const repoPlaceholder = (await page.textContent('#gh-repo option[value=""]')) || "";
   if (!repoPlaceholder.includes("必填")) throw new Error(`repo placeholder=${repoPlaceholder}`);
-  const saved = (await page.textContent("#gh-saved-info")) || "";
-  if (!saved.includes("默认留空")) throw new Error(`saved info=${saved}`);
   await page
     .waitForFunction(
       () => {
@@ -112,7 +119,8 @@ await step("内容源表单：PAT 链接与下拉", async () => {
   return `${status.slice(0, 36)}`;
 });
 
-await step("内容源表单：空值保存被明确拦截", async () => {
+await step("内容源表单：清空仓库后保存被明确拦截", async () => {
+  await page.selectOption("#gh-repo", "");
   await page.click("#save-provider");
   const msg = (await page.textContent("#prov-msg")) || "";
   if (!msg.includes("仓库为空")) throw new Error(msg);

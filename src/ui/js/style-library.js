@@ -170,6 +170,13 @@
       "radius": theme.radius[0], "radius-sm": theme.radius[1],
       "sans": theme.font[0], "font-head": theme.font[1], "mono": theme.font[2],
       "label-transform": theme.labelTransform || "none",
+      /* 按钮规范：结构层常量，所有主题共用；--btn-radius 随主题圆角换档 */
+      "btn-h": "36px", "btn-h-sm": "28px", "btn-h-icon": "36px",
+      "btn-pad": "14px", "btn-pad-sm": "10px",
+      "btn-gap": "8px", "btn-gap-sm": "6px", "btn-icon": "18px",
+      "btn-radius": "var(--radius-sm)",
+      "dur-feedback": "140ms", "dur-press": "90ms", "dur-theme": "220ms",
+      "ease": "cubic-bezier(.2, .7, .3, 1)",
       /* 强调色派生 */
       "accent-soft": rgba(c.accent, 0.14), "accent-border": rgba(c.accent, 0.35),
       "focus-ring": rgba(c.accent, 0.16),
@@ -216,7 +223,10 @@
   var REQUIRED_TOKENS = [
     "bg", "bg-2", "panel", "panel-2", "panel-3", "border", "border-soft", "text", "text-dim",
     "muted", "accent", "accent-2", "ok", "warn", "danger", "input-bg", "radius", "radius-sm",
-    "sans", "font-head", "mono", "label-transform", "accent-soft", "accent-border", "focus-ring",
+    "sans", "font-head", "mono", "label-transform",
+    "btn-h", "btn-h-sm", "btn-h-icon", "btn-pad", "btn-pad-sm", "btn-gap", "btn-gap-sm",
+    "btn-icon", "btn-radius", "dur-feedback", "dur-press", "dur-theme", "ease",
+    "accent-soft", "accent-border", "focus-ring",
     "accent-fg", "on-brand", "brand-a", "brand-b", "brand-glow", "btn-primary-a", "btn-primary-b",
     "btn-primary-border", "btn-primary-fg", "ok-soft", "ok-border", "ok-fg", "warn-soft",
     "warn-border", "warn-fg", "danger-soft", "danger-border", "danger-fg", "info-soft",

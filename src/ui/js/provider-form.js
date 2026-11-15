@@ -37,12 +37,18 @@ function genericFields(defs, params) {
     </label>`).join("");
 }
 
-/** Placeholder is always an empty value: an untouched form must never look filled. */
+/**
+ * A saved repo/branch is rendered as a real, selected option, so reopening the
+ * settings page shows the content source currently in use. The empty option
+ * stays available as an explicit "not chosen" state.
+ */
 const REPO_PLACEHOLDER = "— 请选择 GitHub 仓库（必填）—";
 const BRANCH_PLACEHOLDER = "— 请选择分支（必填）—";
 const BRANCH_NO_REPO = "— 待选择分支（请先选择仓库）—";
+const SAVED_NOTE = "当前配置";
+const MANUAL_NOTE = "手动填写";
 
-function repoOptions(repos, current) {
+function repoOptions(repos, current, missingNote = MANUAL_NOTE) {
   const rows = [`<option value="">${REPO_PLACEHOLDER}</option>`];
   for (const r of repos) {
     const notes = [r.private ? "私有" : "", r.push === false ? "只读" : ""].filter(Boolean);
@@ -53,12 +59,12 @@ function repoOptions(repos, current) {
     );
   }
   if (current && !repos.some((r) => r.full_name === current)) {
-    rows.push(`<option value="${esc(current)}" selected>${esc(current)}（手动填写）</option>`);
+    rows.push(`<option value="${esc(current)}" selected>${esc(current)}（${missingNote}）</option>`);
   }
   return rows.join("");
 }
 
-function branchOptions(branches, current) {
+function branchOptions(branches, current, missingNote = MANUAL_NOTE) {
   const rows = [`<option value="">${BRANCH_PLACEHOLDER}</option>`];
   for (const b of branches) {
     rows.push(
@@ -66,7 +72,7 @@ function branchOptions(branches, current) {
     );
   }
   if (current && !branches.some((b) => b.name === current)) {
-    rows.push(`<option value="${esc(current)}" selected>${esc(current)}（手动填写）</option>`);
+    rows.push(`<option value="${esc(current)}" selected>${esc(current)}（${missingNote}）</option>`);
   }
   return rows.join("");
 }
@@ -77,7 +83,7 @@ function githubFields(params) {
   const savedBranch = params.branch || "";
   const stored = token.includes("******");
   const savedInfo = savedRepo || savedBranch
-    ? `<div class="picker-note" id="gh-saved-info">当前已保存：仓库 ${esc(savedRepo || "未设置")} · 分支 ${esc(savedBranch || "未设置")}。为避免误用旧值，下方两项默认留空，保存前请重新选择。</div>`
+    ? `<div class="picker-note" id="gh-saved-info">当前已保存：仓库 ${esc(savedRepo || "未设置")} · 分支 ${esc(savedBranch || "未设置")}。已自动回填到下方两项，可直接保存；如需更换请重新选择。</div>`
     : "";
   return `
     <div class="field">
@@ -122,10 +128,10 @@ function githubFields(params) {
             <button type="button" class="link-btn" id="gh-repo-manual">手动输入</button>
           </span>
         </div>
-        <select id="gh-repo" data-param="repo">${repoOptions([], "")}</select>
+        <select id="gh-repo" data-param="repo">${repoOptions([], savedRepo, SAVED_NOTE)}</select>
         <input id="gh-repo-manual-input" value="" placeholder="手动填写 owner/repo（必填）" hidden />
         <div class="picker-status" id="gh-repo-status">${
-          stored ? "正在读取授权仓库…" : "未选择仓库；填写密钥并检测后，从下拉中明确选择"
+          stored ? "正在读取授权仓库…" : savedRepo ? "已回填保存的仓库，可重新选择" : "未选择仓库；填写密钥并检测后，从下拉中明确选择"
         }</div>
       </div>
       <div class="field">
@@ -136,9 +142,13 @@ function githubFields(params) {
             <button type="button" class="link-btn" id="gh-branch-manual">手动输入</button>
           </span>
         </div>
-        <select id="gh-branch" data-param="branch"><option value="">${BRANCH_NO_REPO}</option></select>
+        <select id="gh-branch" data-param="branch">${
+          savedBranch ? branchOptions([], savedBranch, SAVED_NOTE) : `<option value="">${BRANCH_NO_REPO}</option>`
+        }</select>
         <input id="gh-branch-manual-input" value="" placeholder="手动填写分支名（必填）" hidden />
-        <div class="picker-status" id="gh-branch-status">未选择分支；请先选择仓库，再从下拉中明确选择</div>
+        <div class="picker-status" id="gh-branch-status">${
+          savedBranch ? "已回填保存的分支；读取仓库后自动载入完整分支列表" : "未选择分支；请先选择仓库，再从下拉中明确选择"
+        }</div>
       </div>
     </div>
     <label class="field"><span>博客路径</span>
@@ -207,8 +217,13 @@ export function bindProviderFields(meta) {
   const repoManualBtn = document.getElementById("gh-repo-manual");
   const branchManualBtn = document.getElementById("gh-branch-manual");
 
-  const state = { repos: [], branches: [], login: "", loadingRepos: false, loadingBranches: false };
+  const state = {
+    repos: [], branches: [], login: "",
+    savedRepo: repoEl.value.trim(), savedBranch: branchEl.value.trim(),
+    loadingRepos: false,
+  };
   let disposed = false;
+  let branchSeq = 0; // a repo switch invalidates any in-flight branch request
 
   const tokenValue = () => tokenEl.value.trim();
   const currentRepo = () => (repoManual.hidden ? repoEl.value.trim() : repoManual.value.trim());
@@ -216,31 +231,31 @@ export function bindProviderFields(meta) {
 
   const fillRepos = () => {
     const current = currentRepo();
-    repoEl.innerHTML = repoOptions(state.repos, current);
+    repoEl.innerHTML = repoOptions(state.repos, current, current === state.savedRepo ? SAVED_NOTE : MANUAL_NOTE);
   };
 
   const fillBranches = (current) => {
-    branchEl.innerHTML = branchOptions(state.branches, current);
+    branchEl.innerHTML = branchOptions(state.branches, current, current === state.savedBranch ? SAVED_NOTE : MANUAL_NOTE);
   };
 
   const refreshBranches = async ({ auto = false } = {}) => {
-    if (disposed || state.loadingBranches) return;
+    if (disposed) return;
+    const seq = ++branchSeq;
     const repo = currentRepo();
     if (!repo) {
       branchEl.innerHTML = `<option value="">${BRANCH_NO_REPO}</option>`;
       setStatus(branchStatus, "", "未选择分支；请先选择仓库");
       return;
     }
-    state.loadingBranches = true;
     setStatus(branchStatus, "loading", `正在读取 ${repo} 的分支…`);
     try {
       const res = await api("/api/settings/github/branches", {
         method: "POST",
         body: { token: tokenValue(), repo },
       });
-      if (disposed) return;
+      if (disposed || seq !== branchSeq) return;
       state.branches = res.branches || [];
-      fillBranches(currentBranch()); // never auto-select a branch
+      fillBranches(currentBranch()); // keep the saved/current selection
       const fallback = res.default_branch || "";
       if (!state.branches.length) {
         setStatus(branchStatus, "err", "该仓库没有可用分支（可能是空仓库）；可手动输入分支名");
@@ -248,15 +263,13 @@ export function bindProviderFields(meta) {
         setStatus(
           branchStatus,
           "ok",
-          `已读取 ${state.branches.length} 个分支${res.truncated ? "（仅显示前 300 个）" : ""} · 默认 ${fallback || "main"}，请手动选择`,
+          `已读取 ${state.branches.length} 个分支${res.truncated ? "（仅显示前 300 个）" : ""} · 默认 ${fallback || "main"}，可重新选择`,
         );
       }
     } catch (e) {
-      if (disposed) return;
+      if (disposed || seq !== branchSeq) return;
       setStatus(branchStatus, "err", `读取分支失败：${e.message}`);
       if (!auto) toast(e.message, "err");
-    } finally {
-      state.loadingBranches = false;
     }
   };
 
@@ -270,7 +283,7 @@ export function bindProviderFields(meta) {
       repoStatus,
       "ok",
       state.repos.length
-        ? `已连接 ${who} · 共 ${state.repos.length} 个仓库${suffix}，请手动选择`
+        ? `已连接 ${who} · 共 ${state.repos.length} 个仓库${suffix}，可重新选择`
         : `已连接 ${who}，该账号暂无可访问仓库；可手动输入仓库`,
     );
     setStatus(
@@ -278,8 +291,8 @@ export function bindProviderFields(meta) {
       "ok",
       state.repos.length ? `密钥有效：${who}` : `密钥有效：${who}，但未返回仓库`,
     );
-    // Loading options never fills the fields: both stay empty until the user
-    // explicitly picks a repository and then a branch.
+    // Refreshing the option lists keeps the current selection (the saved
+    // values on first render). Only an explicit repo switch clears the branch.
     if (currentRepo()) {
       refreshBranches({ auto: true });
     } else {
@@ -336,7 +349,7 @@ export function bindProviderFields(meta) {
         if (!Array.from(select.options).some((o) => o.value === value)) {
           select.insertAdjacentHTML(
             "beforeend",
-            `<option value="${esc(value)}">${esc(value)}（手动填写）</option>`,
+            `<option value="${esc(value)}">${esc(value)}（${MANUAL_NOTE}）</option>`,
           );
         }
         select.value = value;
@@ -349,7 +362,13 @@ export function bindProviderFields(meta) {
     }
   };
 
-  const onRepoChange = () => refreshBranches({});
+  const onRepoChange = () => {
+    // A different repository has a different branch set: never carry the old
+    // branch selection over silently.
+    branchEl.value = "";
+    if (!branchManual.hidden) branchManual.value = "";
+    refreshBranches({});
+  };
   const onTokenChange = () => {
     if (!tokenValue() || tokenValue().includes("******")) return;
     refreshRepos({ force: true });

@@ -103,8 +103,12 @@ function bindProviderTab(s) {
   let dispose = bindProviderFields(s.providers.find((p) => p.name === type.value));
   type.onchange = () => {
     const meta = s.providers.find((p) => p.name === type.value);
+    const cfg = JSON.parse(s.raw.PROVIDER || '{"provider":"","params":{}}');
+    // Switching back to the configured provider restores its saved values;
+    // switching to another provider starts from a blank form.
+    const params = cfg.provider === type.value ? (cfg.params || {}) : {};
     dispose();
-    document.getElementById("prov-fields").innerHTML = providerFieldsHtml(meta, {});
+    document.getElementById("prov-fields").innerHTML = providerFieldsHtml(meta, params);
     dispose = bindProviderFields(meta);
   };
   document.getElementById("save-provider").onclick = async () => {

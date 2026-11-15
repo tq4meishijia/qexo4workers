@@ -297,3 +297,9 @@ ego-browser nodejs < test/ego-qa.mjs   # ego 就绪后的等价复验
 - 线上 Worker 仍为修复前版本，需重新 `npm run deploy` 后按 `npm run test:prod` 与 `node test/prod-ui.mjs` 复验。
 - ego-browser 运行时仍不可用，§0 的工具偏差与 `test/ego-qa.mjs`（NOT RUN）状态不变。
 - 常规 `npm run test:ui` 仍为 13 项；说说页与图床引导的覆盖由 `test/browser-qa.mjs` 的 G1/G2/E4 承担。
+
+---
+
+### 11.4 后续修订注记（2026-11-15）
+
+H3 / H4 / H5 的「默认留空」预期已改为「自动回填已保存值」，§3–§11 保留当时基线。`test/browser-qa.mjs` 的同名用例已同步更新，改动清单与回归结果见 `docs/handoff.md` §9。
