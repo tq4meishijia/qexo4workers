@@ -231,7 +231,7 @@ async function renderMcp({ view }) {
                 scopes,
                 tools: data.tools,
                 protocols: data.protocols,
-                appVersion: state.settings?.version || "1.0.1",
+                appVersion: state.settings?.version || "1.1.0",
               });
               showToken(res.token, scopes, prompt);
               const next = await api("/api/mcp");

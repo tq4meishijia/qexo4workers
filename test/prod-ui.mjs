@@ -60,7 +60,7 @@ await step("登录并进入控制台", async () => {
   await page.waitForSelector(".stat");
   const pill = await page.textContent("#provider-pill");
   const version = (await page.textContent("#version")) || "";
-  if (!version.includes("1.0.1")) throw new Error(`unexpected UI version: ${version}`);
+  if (!version.includes("1.1.0")) throw new Error(`unexpected UI version: ${version}`);
   return `${pill.trim()} · ${version.trim()}`;
 });
 

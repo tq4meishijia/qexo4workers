@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.0.1** |
+| 项目版本 | **1.1.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -56,7 +56,7 @@
 | S7 登录与默认账号 | ✅ 完成 | 自动建号、服务端 302 守卫、默认密码警示条 |
 | S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、默认留空语义 |
 | S9 文档与仓库化 | ✅ 完成 | README / handoff / 架构图 / 截图资源 / GitHub 仓库 |
-| S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 与版本断言均为 `1.0.1` |
+| S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 与版本断言均为 `1.1.0` |
 | S11 Agent 一键接入提示词 | ✅ 完成 | `src/ui/js/mcp-prompt.js` 纯函数 + 创建令牌弹窗自动生成 / 复制 + 结构规范文档 |
 
 ### 2.2 验收结果
@@ -199,7 +199,7 @@
 
 ---
 
-交接完成 · 项目版本 v1.0.1 · 正确性由本次交付的测试与线上冒烟结果担保
+交接完成 · 项目版本 v1.1.0 · 正确性由本次交付的测试与线上冒烟结果担保
 
 ---
 
@@ -219,5 +219,15 @@
 - 机器可读结果：`test/out/browser-qa-report.json`
 - 截图证据：`test/out/qa-*.png`
 - 已执行脚本 / 服务栈 / ego 复跑脚本：`test/browser-qa.mjs`、`test/ego-serve.mjs`、`test/ego-qa.mjs`
-- **版本**：本次修复与版本字段同步为 **v1.0.1**（2026-11-15），对应 Git 标签 `v1.0.1`；页首与 §2.2 的版本号已同步。
-- 待办：**线上 Worker 仍为修复前版本**，需重新 `npm run deploy` 后按 `npm run test:prod` 与 `node test/prod-ui.mjs` 复验。
+- **版本**：该轮修复与版本字段同步为 **v1.0.1**（2026-11-15），对应 Git 标签 `v1.0.1`；历史记录保留不改。
+- 待办（已由 v1.1.0 关闭）：线上 Worker 一度仍为修复前版本，见下方 §8。
+
+---
+
+## 8. v1.1.0 发布（2026-11-15）
+
+- **内容**：设置页新增「外观」标签，6 套面板主题一键切换；选择通过 Cookie `qexo_ui_style` 持久化，刷新／重新访问自动恢复，缺失或无效值回退默认主题 `midnight`。主题集中配置在 `src/ui/js/style-library.js` 的 `THEMES` 数组，其余 token 由 `buildTokens()` 派生。
+- **版本字段**：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章／版本表／页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值、`test/e2e.mjs`（2 处）、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言，全部同步为 `1.1.0`。历史报告与 `test/fixture/repo/package.json` 的基线版本按原样保留。
+- **验证**：`npm test` 58/58、`npm run test:ui` 17/17、`test/browser-qa.mjs` 49/49、`npm run deploy:dry` 通过。
+- **发布**：提交推送至 `main`，附注标签 `v1.1.0`；执行 `npm run deploy` 部署 Worker，关闭 §7 遗留的部署待办。
+

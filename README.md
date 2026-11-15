@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.0.1-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.1.0-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.0.1**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.1.0**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -93,7 +93,7 @@ sequenceDiagram
 | 配置 | `_config.yml` 等在线编辑、YAML/JSON 合法性校验、7 种博客平台目录映射、自定义字段 |
 | 媒体 | 图床上传 / 列表 / 删除（R2、GitHub、S3、Custom），长缓存读取 |
 | 互动 | 友链与前台申请、说说发布与点赞、PV/UV 统计与域名白名单、站内通知 |
-| 系统 | 4 步初始化向导、6 组设置、导入导出备份、缓存清理、WebHook 自动配置、部署触发（Pages / Vercel / Actions / 自定义） |
+| 系统 | 4 步初始化向导、8 组设置（含「外观」面板风格切换）、导入导出备份、缓存清理、WebHook 自动配置、部署触发（Pages / Vercel / Actions / 自定义） |
 | 国际化 | 7 种语言词典，由脚本从上游 Python 字典原样导出 |
 
 ### 2.2 接口与协议
@@ -292,6 +292,7 @@ src/
   api-public.ts     /pub 兼容层
   mcp.ts            MCP 服务端（JSON-RPC / 工具 / 资源 / 令牌）
   ui/               管理端 SPA（原生 JS/CSS，7 语言词典）
+    js/style-library.js  面板风格库：主题集中配置、Cookie 持久化、默认回退（head 同步加载）
     js/mcp-prompt.js  Agent 配置提示词生成器（纯函数，Node 可直接单测）
 mcp/stdio-bridge.mjs   stdio → HTTP 桥接
 migrations/        D1 schema
@@ -306,7 +307,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 套件 | 命令 | 结果 |
 |---|---|---|
 | API 端到端 | `npm test` | **58/58** |
-| 浏览器 UI | `npm run test:ui` | **13/13** |
+| 浏览器 UI | `npm run test:ui` | **17/17**（含风格切换 / Cookie 恢复 / 无效值回退） |
 | 线上 API 冒烟 | `QEXO_BASE_URL=<部署地址> npm run test:prod` | **15/15**（0 跳过） |
 | 线上浏览器 | `QEXO_BASE_URL=<部署地址> node test/prod-ui.mjs` | **7/7** |
 | 生产构建 | `npm run deploy:dry` | 470.85 KiB / gzip 100.11 KiB |
@@ -358,4 +359,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.0.1** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.1.0** · 2026-11

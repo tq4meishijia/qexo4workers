@@ -72,7 +72,7 @@ export function buildAgentPrompt(ctx) {
     scopes = ["read"],
     tools = [],
     protocols = ["2025-06-18", "2025-03-26", "2024-11-05"],
-    appVersion = "1.0.1",
+    appVersion = "1.1.0",
     bridgePath = "<仓库根目录>/mcp/stdio-bridge.mjs",
     serverName = "qexo",
   } = ctx;

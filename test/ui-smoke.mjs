@@ -294,6 +294,114 @@ await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
   return `prompt ${prompt.length} chars, ${(prompt.match(/^## /gm) || []).length} sections`;
 });
 
+/* ------------------------------------------------------------------ */
+/* 面板风格：Cookie 持久化、即时生效、刷新恢复、无效值回退            */
+/* ------------------------------------------------------------------ */
+
+await step("ui: 风格库集中配置与默认回退", async () => {
+  await page.goto(base + "/#/settings/appearance", { waitUntil: "networkidle" });
+  await page.waitForSelector("#style-grid");
+  // 只清除风格 Cookie，保留登录会话 Cookie
+  await page.evaluate(() => {
+    document.cookie = "qexo_ui_style=; Path=/; Max-Age=0; SameSite=Lax";
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("#style-grid");
+  const info = await page.evaluate(() => ({
+    count: window.QexoStyles.list().length,
+    defaultId: window.QexoStyles.DEFAULT_ID,
+    current: window.QexoStyles.current(),
+    domStyle: document.documentElement.getAttribute("data-style"),
+    problems: window.QexoStyles.verify(),
+    cookie: document.cookie,
+    verifyText: document.getElementById("style-verify")?.textContent || "",
+  }));
+  assert.ok(info.count >= 6, `主题数量不足: ${info.count}`);
+  assert.equal(info.problems.length, 0, info.problems.join("; "));
+  assert.equal(info.current, info.defaultId);
+  assert.equal(info.domStyle, info.defaultId);
+  assert.ok(!info.cookie.includes("qexo_ui_style="), "Cookie 缺失时不应自动写入");
+  assert.ok(info.verifyText.includes("配置自检通过"), info.verifyText);
+  return `${info.count} 套主题，默认 ${info.defaultId}`;
+});
+
+await step("ui: 一键切换即时生效并写入 Cookie", async () => {
+  const before = await page.evaluate(() => ({
+    border: getComputedStyle(document.querySelector(".card")).borderTopColor,
+    token: getComputedStyle(document.documentElement).getPropertyValue("--border-soft").trim(),
+  }));
+  await page.click('.style-card[data-style-id="corporate"]');
+  await page.waitForTimeout(300); // 等绘制类补间结束，再读计算样式
+  const after = await page.evaluate(() => ({
+    id: window.QexoStyles.current(),
+    domStyle: document.documentElement.getAttribute("data-style"),
+    bg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
+    border: getComputedStyle(document.querySelector(".card")).borderTopColor,
+    token: getComputedStyle(document.documentElement).getPropertyValue("--border-soft").trim(),
+    active: document.querySelector(".style-card.is-active")?.dataset.styleId,
+    cookie: document.cookie,
+  }));
+  assert.equal(after.id, "corporate");
+  assert.equal(after.domStyle, "corporate");
+  assert.equal(after.bg, "#f8fafc");
+  assert.equal(after.active, "corporate");
+  assert.notEqual(after.token, before.token, "token 未换档");
+  assert.notEqual(after.border, before.border, "卡片实际绘制色未变化");
+  assert.ok(after.cookie.includes("qexo_ui_style=corporate"), after.cookie);
+  const jar = await page.context().cookies(base);
+  const ck = jar.find((c) => c.name === "qexo_ui_style");
+  assert.ok(ck, "风格 Cookie 未写入浏览器");
+  assert.equal(ck.path, "/", ck.path);
+  assert.equal(ck.sameSite, "Lax", ck.sameSite);
+  assert.ok(ck.expires > Date.now() / 1000, "Cookie 应为持久化而非会话级");
+  return `即时生效 + Cookie(path=${ck.path}, sameSite=${ck.sameSite})`;
+});
+
+await step("ui: 刷新后自动恢复上次选择（首屏无闪）", async () => {
+  // 在 document_start 观察 data-style 的第一次赋值，验证它由 head 同步脚本完成
+  // document_start 时 documentElement 可能还不存在，观察 document 本身并开 subtree
+  await page.addInitScript(() => {
+    window.__firstAppliedStyle = null;
+    new MutationObserver(() => {
+      const el = document.documentElement;
+      if (window.__firstAppliedStyle === null && el && el.hasAttribute("data-style")) {
+        window.__firstAppliedStyle = el.getAttribute("data-style");
+      }
+    }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-style"] });
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("#style-grid");
+  const restored = await page.evaluate(() => ({
+    first: window.__firstAppliedStyle,
+    id: window.QexoStyles.current(),
+    checked: document.querySelector(".style-input:checked")?.value,
+    active: document.querySelector(".style-card.is-active")?.dataset.styleId,
+  }));
+  assert.equal(restored.first, "corporate", "首屏首次写入的风格不是已保存值");
+  assert.equal(restored.id, "corporate");
+  assert.equal(restored.checked, "corporate");
+  assert.equal(restored.active, "corporate");
+  return "首屏还原 corporate，控件状态一致";
+});
+
+await step("ui: Cookie 无效值回退默认并清理脏值", async () => {
+  await page.evaluate(() => {
+    document.cookie = "qexo_ui_style=__not_a_theme__; Path=/; Max-Age=31536000; SameSite=Lax";
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("#style-grid");
+  const fb = await page.evaluate(() => ({
+    defaultId: window.QexoStyles.DEFAULT_ID,
+    id: window.QexoStyles.current(),
+    cookie: document.cookie,
+    bad: window.QexoStyles.apply("__another_bad_id__", { persist: false }),
+  }));
+  assert.equal(fb.id, fb.defaultId);
+  assert.equal(fb.bad, fb.defaultId, "apply 非法 id 未回退");
+  assert.ok(!fb.cookie.includes("qexo_ui_style="), "无效 Cookie 应被清除");
+  return `脏 Cookie 与非法 id 均回退 ${fb.defaultId}`;
+});
+
 await step("ui: 无 JS 运行时错误", async () => {
   const filtered = errors.filter((e) => !/favicon|fonts\.googleapis|ERR_/i.test(e));
   assert.equal(filtered.length, 0, filtered.join("\n"));

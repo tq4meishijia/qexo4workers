@@ -16,6 +16,7 @@ async function loadSettings(force = false) {
 const TABS = [
   { id: "provider", label: "内容源" },
   { id: "basic", label: "基本" },
+  { id: "appearance", label: "外观" },
   { id: "image", label: "图床" },
   { id: "security", label: "安全" },
   { id: "statistic", label: "统计" },
@@ -642,6 +643,107 @@ function routeSettingsRefresh() {
 }
 
 /* ------------------------------------------------------------------ */
+/* appearance · 面板风格切换                                           */
+/* ------------------------------------------------------------------ */
+
+let styleChangeListener = null;
+
+function appearanceTab() {
+  const lib = window.QexoStyles;
+  if (!lib) {
+    return `<div class="card"><div class="empty"><strong>风格库未加载</strong>请检查 /js/style-library.js 是否可访问</div></div>`;
+  }
+  const current = lib.current();
+  const themes = lib.list();
+  const defaultName = lib.get(lib.DEFAULT_ID)?.name || lib.DEFAULT_ID;
+  return `
+  <div class="card">
+    <div class="card-head">
+      <div><h3>面板风格</h3><div class="sub">共 ${themes.length} 套 · 切换即时生效，选择通过 Cookie 记住</div></div>
+      <span class="tag info" id="style-current">当前：${esc(lib.get(current)?.name || current)}</span>
+    </div>
+    <div class="style-grid" id="style-grid" role="radiogroup" aria-label="面板风格">
+      ${themes.map((s) => `
+        <label class="style-card ${s.id === current ? "is-active" : ""}" data-style-id="${esc(s.id)}">
+          <input class="style-input sr-only" type="radio" name="ui-style" value="${esc(s.id)}" ${s.id === current ? "checked" : ""} />
+          <span class="style-swatches" aria-hidden="true">${s.swatches.map((c) => `<i style="background:${esc(c)}"></i>`).join("")}</span>
+          <span class="style-info">
+            <span class="style-title-row"><span class="style-name">${esc(s.name)}</span><span class="style-check" aria-hidden="true">✓</span></span>
+            <span class="style-en">${esc(s.en)}</span>
+            <span class="style-note">${esc(s.note)}</span>
+          </span>
+        </label>`).join("")}
+    </div>
+    <div class="style-foot mt">
+      <p class="hint" id="style-hint" style="margin:0">刷新或重新访问会自动恢复上次选择；Cookie 缺失或无效时回退到默认风格「${esc(defaultName)}」。</p>
+      <button class="btn sm" id="style-reset">恢复默认</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>扩展新主题</h3></div>
+    <p class="hint">所有主题集中定义在 <code>/js/style-library.js</code> 的 <code>THEMES</code> 数组中；每套只需提供 16 个核心色，其余 token 由 <code>buildTokens()</code> 统一派生。新增一项即可出现在上方控件中，无需改动页面或样式表。</p>
+    <p class="hint" id="style-verify"></p>
+  </div>`;
+}
+
+function bindAppearanceTab() {
+  const lib = window.QexoStyles;
+  if (!lib) return;
+  const grid = document.getElementById("style-grid");
+  if (!grid) return;
+
+  const refresh = (id) => {
+    grid.querySelectorAll(".style-card").forEach((card) => {
+      card.classList.toggle("is-active", card.dataset.styleId === id);
+    });
+    const tag = document.getElementById("style-current");
+    if (tag) tag.textContent = "当前：" + (lib.get(id)?.name || id);
+  };
+  const persistNote = (ok) => {
+    const hint = document.getElementById("style-hint");
+    if (!hint) return;
+    hint.textContent = ok
+      ? "已保存到 Cookie，刷新或重新访问会自动恢复；Cookie 缺失或无效时回退到默认风格。"
+      : "浏览器禁止写入 Cookie，本次切换仅在当前页面有效。";
+  };
+
+  grid.addEventListener("change", (e) => {
+    if (!e.target || e.target.name !== "ui-style") return;
+    const id = lib.apply(e.target.value);
+    refresh(id);
+    persistNote(lib.persisted());
+    toast("已切换至 " + (lib.get(id)?.name || id), "ok");
+  });
+
+  document.getElementById("style-reset").onclick = () => {
+    const id = lib.reset();
+    const input = grid.querySelector(`.style-input[value="${id}"]`);
+    if (input) input.checked = true;
+    refresh(id);
+    persistNote(lib.persisted());
+    toast("已恢复默认风格", "ok");
+  };
+
+  // 允外部调用 QexoStyles.apply() 时同步控件；重渲染前先移除旧监听，避免累积。
+  if (styleChangeListener) document.removeEventListener("qexo:stylechange", styleChangeListener);
+  styleChangeListener = (e) => {
+    const id = e.detail.id;
+    const input = grid.querySelector(`.style-input[value="${id}"]`);
+    if (input && !input.checked) input.checked = true;
+    refresh(id);
+  };
+  document.addEventListener("qexo:stylechange", styleChangeListener);
+
+  const problems = lib.verify();
+  const box = document.getElementById("style-verify");
+  if (box) {
+    box.textContent = problems.length
+      ? "配置自检发现问题：" + problems.join("；")
+      : `配置自检通过：${lib.list().length} 套主题的核心色与派生 token 均完整。`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* account                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -705,6 +807,9 @@ async function renderSettings({ view, parts }) {
   } else if (tab === "basic") {
     panel.innerHTML = basicTab(s);
     bindBasicTab();
+  } else if (tab === "appearance") {
+    panel.innerHTML = appearanceTab();
+    bindAppearanceTab();
   } else if (tab === "image") {
     panel.innerHTML = imageTab(s);
     bindImageTab(s);
