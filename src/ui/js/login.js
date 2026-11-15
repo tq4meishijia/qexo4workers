@@ -37,6 +37,39 @@ function loadRecaptcha(siteKey, version, containerId, onReady) {
   document.head.appendChild(script);
 }
 
+let turnstileWidgetId = null;
+
+function resetTurnstile() {
+  if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
+}
+
+/** Only the widget runs in the browser; siteverify stays in the Worker. */
+function loadTurnstile(siteKey) {
+  const box = $("turnstile-widget");
+  box.hidden = false;
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  script.async = true;
+  script.defer = true;
+  script.onload = () => {
+    if (!window.turnstile) {
+      showError("人机验证组件加载失败，请检查网络");
+      return;
+    }
+    turnstileWidgetId = window.turnstile.render(box, {
+      sitekey: siteKey,
+      action: "login",
+      theme: "auto",
+      callback: clearError,
+      "error-callback": () => showError("人机验证加载失败，请刷新页面重试"),
+    });
+    getToken = () =>
+      turnstileWidgetId === null ? "" : window.turnstile.getResponse(turnstileWidgetId) || "";
+  };
+  script.onerror = () => showError("人机验证组件加载失败，请检查网络");
+  document.head.appendChild(script);
+}
+
 let getToken = () => "";
 let captchaVersion = "";
 
@@ -60,7 +93,11 @@ async function boot() {
 
   const v3 = me.recaptcha?.v3;
   const v2 = me.recaptcha?.v2;
-  if (v3 && me.recaptcha.v3_site) {
+  const ts = me.turnstile;
+  if (ts?.enabled && ts.site_key) {
+    captchaVersion = "turnstile";
+    loadTurnstile(ts.site_key);
+  } else if (v3 && me.recaptcha.v3_site) {
     captchaVersion = "v3";
     loadRecaptcha(me.recaptcha.v3_site, "v3", "", (fn) => (getToken = fn));
   } else if (v2 && me.recaptcha.v2_site) {
@@ -78,12 +115,17 @@ $("login-form").addEventListener("submit", async (event) => {
 
   try {
     const form = event.target;
+    const challenge = captchaVersion ? await getToken() : "";
+    if (captchaVersion === "turnstile" && !challenge) {
+      throw new Error("请先完成人机验证");
+    }
     const payload = {
       username: form.username.value.trim(),
       password: form.password.value,
-      verify: captchaVersion ? await getToken() : "",
-      type: captchaVersion,
+      verify: captchaVersion === "turnstile" ? "" : challenge,
+      type: captchaVersion === "turnstile" ? "" : captchaVersion,
     };
+    if (captchaVersion === "turnstile") payload["cf-turnstile-response"] = challenge;
     const res = await fetch("/api/auth", {
       method: "POST",
       credentials: "same-origin",
@@ -97,6 +139,7 @@ $("login-form").addEventListener("submit", async (event) => {
     location.replace(next);
   } catch (error) {
     showError(error.message || "登录失败");
+    if (captchaVersion === "turnstile") resetTurnstile();
     btn.disabled = false;
     btn.textContent = "登录";
   }

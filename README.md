@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.2.0-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.3.0-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.2.0**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.3.0**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -113,6 +113,7 @@ sequenceDiagram
 - 页面守卫：未登录访问 `/` 由 Worker 直接 302 到 `/login?next=…`，SPA 启动与 API 401 双重兜底；回跳路径做同源白名单校验。
 - 凭据：Provider / 图床 token 一律掩码回显；MCP 令牌与 WebHook APIKey 只存 SHA-256，可单独吊销。「GitHub 内容源」图床不另存密钥，直接复用内容源配置。
 - 内容源：默认引导申请 **Fine-grained PAT**，只授权单个博客仓库与 `Contents: Read and write`。
+- 登录人机验证：配置齐备时登录页渲染 **Cloudflare Turnstile**，服务端在 `/api/auth` 前置 canonical siteverify（校验 `success` / `action=login` / hostname 白名单）；浏览器只取 token，不调用 siteverify。密钥只存 `wrangler secret` 或本地 `.dev.vars`，不入库、不回显，配置步骤见 `docs/deploy.md`。
 
 ### 2.4 界面预览
 
@@ -314,7 +315,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 线上测试的目标地址只从命令行参数或环境变量 `QEXO_BASE_URL` 读取（默认 `https://qexo.example.com` 占位符），仓库内不保存真实部署地址。
 
-测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫、文章落盘与回滚、配置校验、图床（含内容源图床的目录/前缀优先级）、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
+测试以真实目录模拟 Git 仓库、用构建脚本模拟 Pages 的「检出 → 构建」链路，覆盖初始化、登录守卫（含 Turnstile 独立套件 `node test/turnstile.mjs`）、文章落盘与回滚、配置校验、图床（含内容源图床的目录/前缀优先级）、友链、说说、统计、WebHook、备份、MCP 握手与越权拒绝、PAT 检测与空值表单。详见 [`docs/test-report.md`](docs/test-report.md)。
 
 ---
 
@@ -336,6 +337,7 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 | 9 | 免费额度 | 按日更 1–3 篇、日均 PV 5,000 估算余量 10 倍以上；瓶颈是 Pages 500 次构建/月，见 `docs/quota-analysis.md` |
 | 10 | 生产配置含资源 ID | `wrangler.prod.toml` 带当前账号的 D1 / KV 标识，fork 后请替换成自己的；该文件**不含任何凭据**，`SESSION_SECRET` 与 PAT 均不入库 |
 | 11 | 内容源图床前缀 | 「GitHub 内容源」默认写入内容源仓库 `img-qexo` 目录、访问前缀为 GitHub 原始 raw；下拉可切换 jsDelivr 等公共 CDN，自定义 http(s) 前缀合法时优先级最高，非法时回退下拉；公共 CDN 属于第三方服务，可用性不由本项目保证 |
+| 12 | Turnstile 启用条件 | 需同时设置 `TURNSTILE_SITE_KEY`（公开值，已写入 Wrangler 配置）、`TURNSTILE_SECRET` 与 `TURNSTILE_HOSTNAMES` 才会启用；缺任一则保持原有登录/reCAPTCHA 路径。生产 hostname 白名单不得包含 localhost / 127.0.0.1，密钥绝不写入仓库 |
 
 ---
 
@@ -360,4 +362,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.2.0** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.3.0** · 2026-11

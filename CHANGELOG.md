@@ -4,6 +4,21 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.3.0 — 2026-11-15（MINOR）
+
+**新增：登录页接入 Cloudflare Turnstile（现有 widget）**
+
+- 使用已创建 widget 的公开 site key `0x4AAAAAAGBqe3KzCG_zIoD7`；未创建、也未替换任何 widget。
+- 登录页在配置齐备时渲染 Turnstile widget（`action: login`），提交携带 `cf-turnstile-response`；失败后重置 widget（token 一次性）。
+- 服务端 `/api/auth` 前置 canonical siteverify：要求 `success === true`、`action === login`、`hostname` 在 `TURNSTILE_HOSTNAMES` 白名单内；token 长度异常与网络/解析失败一律拒绝。浏览器不调用 siteverify。
+- 启用条件：`TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` + `TURNSTILE_HOSTNAMES` 三者齐备；缺任一则保持原有登录/reCAPTCHA 路径，不会锁死后台。
+- 密钥不入库、不回显：`TURNSTILE_SECRET` 由 `wrangler secret put` 或本地 `.dev.vars`（已 gitignore）提供；`TURNSTILE_VERIFY_URL` 仅用于本地测试注入。
+- 现有 reCAPTCHA v3/v2 路径未移除；Turnstile 启用时优先且强制，客户端声明其它 `type` 不能绕过。
+
+**验证**：`node test/turnstile.mjs` 9/9（配置下发；无 token、伪造 token、重放、action 不符、hostname 不符、伪造 reCAPTCHA 绕过均被拒绝；合法 token 登录成功；错误密码仍被拒绝）；`npm test` 65/65、`npm run test:ui` 19/19、`browser-qa.mjs` 49/49、`tsc --noEmit` 与 `npm run deploy:dry` 通过。
+
+**待完成**：真实 Turnstile token 的端到端验证需要生产密钥与真实浏览器；本地验证使用 mock siteverify 端点，未声称线上端到端通过。
+
 ## v1.2.0 — 2026-11-15（MINOR）
 
 **新增：独立图床类型「GitHub 内容源」**

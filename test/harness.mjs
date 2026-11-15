@@ -46,7 +46,7 @@ function walkFiles(dir, base = "") {
   return out;
 }
 
-export async function startServers({ fresh = true } = {}) {
+export async function startServers({ fresh = true, extraVars = [] } = {}) {
   if (fresh) {
     fs.rmSync(STATE, { recursive: true, force: true });
     // Sync the fixture over the repo and remove only files that no longer
@@ -86,6 +86,7 @@ export async function startServers({ fresh = true } = {}) {
       "GITHUB_API_BASE:http://127.0.0.1:8788",
       "--var",
       "PUBLIC_ORIGIN:http://127.0.0.1:8787",
+      ...extraVars.flatMap((v) => ["--var", v]),
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
   );

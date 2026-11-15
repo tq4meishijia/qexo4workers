@@ -49,6 +49,23 @@ npx wrangler secret put SESSION_SECRET
 
 Provider 的 GitHub Token、图床密钥不放在环境变量里，而是登录后台后在「设置 → 内容源 / 图床」填写，加密边界由 Cloudflare 账号与 D1 访问控制保证。「GitHub 内容源」图床不另填密钥：它直接复用内容源的 token / 仓库 / 分支，默认上传目录为仓库根目录下的 `img-qexo`，访问前缀默认 GitHub 原始 raw，可在配置页下拉切换 jsDelivr 等公共 CDN，或用合法的自定义 http(s) 前缀覆盖（非法值自动回退下拉）。
 
+### 3.1 登录页 Turnstile（使用已创建的 widget）
+
+站点 key `0x4AAAAAAGBqe3KzCG_zIoD7` 是公开值，已写入 `wrangler.toml` / `wrangler.prod.toml` 的 `[vars]`；widget 已在 Cloudflare 创建，本项目不创建或替换 widget。登录保护在以下三项**同时存在**时自动启用，缺任一时保持原有登录 / reCAPTCHA 路径，不会锁死后台。
+
+| 变量 | 说明 | 存放位置 |
+|---|---|---|
+| `TURNSTILE_SITE_KEY` | 公开 site key | `[vars]`（已配置） |
+| `TURNSTILE_SECRET` | widget 密钥，绝不入库、不写进聊天 | `wrangler secret put` 或本地 `.dev.vars`（已 gitignore） |
+| `TURNSTILE_HOSTNAMES` | 允许的前端 hostname，逗号分隔；**生产不得含 localhost / 127.0.0.1** | `wrangler secret put` 或部署时 `--var` |
+
+```bash
+wrangler secret put TURNSTILE_SECRET --config wrangler.prod.toml
+wrangler secret put TURNSTILE_HOSTNAMES --config wrangler.prod.toml
+```
+
+密钥值从 Cloudflare Dashboard 的 widget 详情获取，由部署者在上述命令的交互提示中输入；仓库、文档与日志都不包含它。服务端在 `/api/auth` 内调用 `https://challenges.cloudflare.com/turnstile/v0/siteverify`，要求 `success === true`、`action === login`、`hostname` 在白名单内；浏览器只加载 widget 并提交 `cf-turnstile-response`，绝不直接调用 siteverify。`TURNSTILE_VERIFY_URL` 是本地测试注入点，生产不要设置。本地验证用 `node test/turnstile.mjs`（mock siteverify，覆盖重放与绕过）。
+
 ## 4. 部署 Worker
 
 ```bash

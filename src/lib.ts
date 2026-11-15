@@ -11,6 +11,10 @@ export interface Env {
   PUBLIC_ORIGIN?: string;
   GITHUB_API_BASE?: string;
   SESSION_SECRET?: string;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
+  TURNSTILE_HOSTNAMES?: string;
+  TURNSTILE_VERIFY_URL?: string;
 }
 
 export interface SessionUser {

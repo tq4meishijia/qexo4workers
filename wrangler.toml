@@ -37,3 +37,9 @@ bucket_name = "qexo-images"
 PUBLIC_ORIGIN = ""
 # Override only for tests: point the VCS clients at a mock API server.
 # GITHUB_API_BASE = "http://127.0.0.1:8788"
+# Turnstile (login). The sitekey is public; the secret belongs in .dev.vars
+# (git-ignored) and must never be committed. All three values must be present
+# before the widget renders and the Worker enforces siteverify.
+TURNSTILE_SITE_KEY = "0x4AAAAAAGBqe3KzCG_zIoD7"
+# TURNSTILE_HOSTNAMES = "localhost,127.0.0.1"
+# TURNSTILE_VERIFY_URL = "http://127.0.0.1:8788/turnstile/siteverify"

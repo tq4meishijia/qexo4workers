@@ -36,3 +36,9 @@ id = "e0892d23927d427e8ace479fa4682724"
 
 [vars]
 PUBLIC_ORIGIN = ""
+# Public Turnstile sitekey (not a secret). Login protection activates only after
+# the operator sets TURNSTILE_SECRET and TURNSTILE_HOSTNAMES as Worker secrets.
+TURNSTILE_SITE_KEY = "0x4AAAAAAGBqe3KzCG_zIoD7"
+# Comma-separated production frontend hostname(s). Never include localhost or
+# 127.0.0.1 in a production allowlist.
+# TURNSTILE_HOSTNAMES = "admin.example.com"

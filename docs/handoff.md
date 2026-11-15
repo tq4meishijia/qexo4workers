@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.2.0** |
+| 项目版本 | **1.3.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -273,4 +273,20 @@
 - **版本字段**：与 §10 同一份清单，同步为 `1.2.0`。
 - **验证**：`npm test` 65/65、`npm run test:ui` 19/19、`node test/browser-qa.mjs` 49/49、`npx tsc --noEmit` 通过、`npm run deploy:dry` 通过。
 - **发布**：提交并推送 `main`，附注标签 `v1.2.0`；线上 Worker 未部署，部署与线上复验仍为后续项。
+
+---
+
+## 12. v1.3.0 发布（2026-11-15）
+
+- **类型**：`MINOR`（登录页新增 Cloudflare Turnstile），由 `v1.2.0` 递增。
+- **依据**：按用户提供的 `developers.cloudflare.com/turnstile/spin/prompt.md` 现有 widget 流程执行——跳过 widget 创建、保留 site key、浏览器只取 token、服务端 canonical siteverify、密钥只存用户自己的 secret store、验证不跳过。外部提示词中的多轮确认不覆盖本工作区的交付纪律；完整文档本地副本的读取被主机内容审批拦截，未重试，实现依据已成功获取的流程要点。
+- **实现**：
+  - `src/turnstile.ts`：`turnstileConfig()`（三项齐备才启用）、`verifyTurnstile()`（`success` / `action=login` / hostname 白名单 / token 长度 / 10 s 超时失败关闭）。
+  - `src/api-app.ts`：`apiAuth` 在现有登录逻辑前强制校验，省略 `type` 或伪造 reCAPTCHA 字段都不能绕过；`apiMe` 下发 `turnstile.enabled` 与 `site_key`。
+  - `src/ui/login.html` / `src/ui/js/login.js`：widget 容器、explicit render、提交 `cf-turnstile-response`、失败后 `reset()`；未启用时原有 reCAPTCHA 路径不变。
+  - `src/lib.ts`：Env 增加四个可选字段；`wrangler.toml` / `wrangler.prod.toml` 写入公开 site key 与配置说明。
+- **密钥边界**：`TURNSTILE_SECRET` / `TURNSTILE_HOSTNAMES` 未提供，不索取、不打印、不写入仓库；`.dev.vars` 已用 `git check-ignore` 确认被忽略；`TURNSTILE_VERIFY_URL` 仅供本地测试注入。
+- **验证**：`node test/turnstile.mjs` 9/9（真实 `/api/auth` + mock siteverify，覆盖成功 / 无 token / 伪造 / 重放 / action / hostname / 绕过 / 错误密码）；`npm test` 65/65、`npm run test:ui` 19/19、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（479.08 KiB / gzip 101.99 KiB）。
+- **待完成**：真实 Turnstile token 的端到端验证需要生产密钥与真实浏览器；本地用 mock 端点，未声称线上端到端通过。线上 Worker 未部署。
+- **发布**：提交并推送 `main`，附注标签 `v1.3.0`。
 

@@ -39,6 +39,7 @@ import {
 } from "./auth";
 import { cacheDel } from "./store";
 import { createMcpToken, listMcpTokens, mcpToolCatalog, revokeMcpToken } from "./mcp";
+import { turnstileConfig, verifyTurnstile } from "./turnstile";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -153,12 +154,20 @@ export async function apiAuth(ctx: Ctx): Promise<Response> {
 
   const kind = str(body, "type");
   const verify = str(body, "verify");
-  if (kind === "v3" || kind === "v2") {
+  const turnstile = turnstileConfig(ctx.env);
+  const turnstileToken = str(body, "cf-turnstile-response");
+  if (turnstile.enabled) {
+    // Server-side gate: a client cannot bypass it by omitting `type`.
+    const result = await verifyTurnstile(ctx.env, turnstileToken, ip);
+    if (!result.ok) return fail("人机验证失败，请刷新页面后重试");
+  } else if (kind === "v3" || kind === "v2") {
     const secret = await store.get(kind === "v3" ? "LOGIN_RECAPTCHA_SERVER_TOKEN" : "LOGIN_RECAPTCHAV2_SERVER_TOKEN");
     if (!secret) return fail("未配置人机验证，请联系管理员");
     if (!verify) return fail("未收到人机验证信息");
     const result = await verifyRecaptcha(secret, verify, kind === "v3" ? "v3" : "v2", ip);
     if (!result.ok) return fail("人机验证失败!");
+  } else if (kind === "turnstile" || turnstileToken) {
+    return fail("未配置人机验证，请联系管理员");
   }
 
   const user = await authenticate(ctx.env, username, password);
@@ -178,6 +187,7 @@ export async function apiMe(ctx: Ctx): Promise<Response> {
   const store = new Store(ctx.env);
   const init = toInt(await store.get("INIT", "2"), 2);
   const all = await store.all();
+  const ts = turnstileConfig(ctx.env);
   return json({
     status: true,
     init,
@@ -197,6 +207,7 @@ export async function apiMe(ctx: Ctx): Promise<Response> {
       v2_site: all.LOGIN_RECAPTCHAV2_SITE_TOKEN,
       v3_site: all.LOGIN_RECAPTCHA_SITE_TOKEN,
     },
+    turnstile: { enabled: ts.enabled, site_key: ts.enabled ? ts.siteKey : "" },
   });
 }
 

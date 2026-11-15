@@ -18,6 +18,8 @@ const TOKEN = process.env.TOKEN || "mock-token";
 
 const stats = { requests: 0, byPath: {} };
 const hooks = [];
+/** Test-only Turnstile tokens: value holds the action/hostname siteverify returns. */
+const turnstileTokens = new Map();
 
 function blobSha(buf) {
   return crypto.createHash("sha1").update(Buffer.concat([Buffer.from(`blob ${buf.length}\0`), buf])).digest("hex");
@@ -72,6 +74,14 @@ function readBody(req) {
   });
 }
 
+function readForm(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(new URLSearchParams(Buffer.concat(chunks).toString("utf8"))));
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   stats.requests++;
@@ -85,7 +95,40 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
-  if (!url.pathname.startsWith("/__") && req.headers.authorization !== `Bearer ${TOKEN}`) {
+  // Test-only Turnstile stand-in: issues one-shot tokens and verifies them.
+  if (url.pathname === "/__turnstile/issue" && req.method === "GET") {
+    const token = `ts-${crypto.randomBytes(12).toString("hex")}`;
+    turnstileTokens.set(token, {
+      used: false,
+      action: url.searchParams.get("action") || "login",
+      hostname: url.searchParams.get("hostname") || "127.0.0.1",
+    });
+    return send(res, 200, { token });
+  }
+
+  if (url.pathname === "/turnstile/siteverify" && req.method === "POST") {
+    const form = await readForm(req);
+    if (form.get("secret") !== "test-turnstile-secret") {
+      return send(res, 200, { success: false, "error-codes": ["invalid-input-secret"] });
+    }
+    const entry = turnstileTokens.get(String(form.get("response") || ""));
+    if (!entry || entry.used) {
+      return send(res, 200, { success: false, "error-codes": ["timeout-or-duplicate"] });
+    }
+    entry.used = true; // replaying a token must fail
+    return send(res, 200, {
+      success: true,
+      action: entry.action,
+      hostname: entry.hostname,
+      challenge_ts: new Date().toISOString(),
+    });
+  }
+
+  if (
+    !url.pathname.startsWith("/__") &&
+    url.pathname !== "/turnstile/siteverify" &&
+    req.headers.authorization !== `Bearer ${TOKEN}`
+  ) {
     return send(res, 401, { message: "Requires authentication" });
   }
 
