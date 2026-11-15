@@ -2,6 +2,7 @@ node_modules/
 .wrangler/
 .dev.vars
 test/.state/
+test/.ego-state/
 test/out/
 *.log
 dist/

@@ -136,6 +136,13 @@ export async function refreshMe() {
 
 export function toast(message, kind = "", ms = 3200) {
   const root = document.getElementById("toasts");
+  if (!root) return;
+  // 相同文案在存活期内只保留一条，并限制并存数量，避免连续操作后
+  // 提示区堆叠旧消息、干扰对当前操作结果的判断。
+  for (const node of [...root.children]) {
+    if (node.textContent === message) node.remove();
+  }
+  while (root.children.length >= 4) root.firstElementChild.remove();
   const el = document.createElement("div");
   el.className = `toast ${kind}`;
   el.textContent = message;
@@ -173,7 +180,9 @@ export function openModal({ title = "提示", body = "", buttons = [{ label: "�
 }
 
 export function closeModal() {
-  document.getElementById("modal").hidden = true;
+  const root = document.getElementById("modal");
+  if (!root || root.hidden) return;
+  root.hidden = true;
   if (modalResolver) modalResolver(true);
   modalResolver = null;
 }
@@ -348,6 +357,8 @@ export function navigate(path) {
 }
 
 export async function renderRoute() {
+  // 任何成功的路由切换都应关闭遗留弹窗，避免遮罩继续拦截页面交互。
+  closeModal();
   const token = ++renderToken;
   const raw = location.hash.replace(/^#/, "") || "/dashboard";
   const [path, queryString] = raw.split("?");
@@ -377,6 +388,9 @@ export async function renderRoute() {
 
 export function startRouter() {
   window.addEventListener("hashchange", renderRoute);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
   renderRoute();
 }
 

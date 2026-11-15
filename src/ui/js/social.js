@@ -1,6 +1,6 @@
 /* Social views: friend links and talks. */
 
-import { api, confirmDialog, esc, filterRows, fmtDate, icon, openModal, route, setTitle, toast } from "./core.js";
+import { api, confirmDialog, debounce, esc, filterRows, fmtDate, icon, openModal, route, setTitle, toast } from "./core.js";
 
 /* ------------------------------------------------------------------ */
 /* friends                                                            */

@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.0.0** |
+| 项目版本 | **1.0.1** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -56,14 +56,14 @@
 | S7 登录与默认账号 | ✅ 完成 | 自动建号、服务端 302 守卫、默认密码警示条 |
 | S8 内容源体验 | ✅ 完成 | Fine-grained PAT 链接、密钥健康检查、仓库/分支下拉、默认留空语义 |
 | S9 文档与仓库化 | ✅ 完成 | README / handoff / 架构图 / 截图资源 / GitHub 仓库 |
-| S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 均为 `1.0.0` |
+| S10 版本号统一 | ✅ 完成 | `package.json`、`package-lock.json`、`QEXO_VERSION`、README / handoff 与版本断言均为 `1.0.1` |
 | S11 Agent 一键接入提示词 | ✅ 完成 | `src/ui/js/mcp-prompt.js` 纯函数 + 创建令牌弹窗自动生成 / 复制 + 结构规范文档 |
 
 ### 2.2 验收结果
 
 | 套件 | 命令 | 结果 |
 |---|---|---|
-| 本地 API e2e | `npm test` | **56/56** |
+| 本地 API e2e | `npm test` | **58/58** |
 | 本地浏览器 UI | `npm run test:ui` | **13/13** |
 | 线上 API 冒烟 | `npm run test:prod` | **15/15，0 跳过** |
 | 线上浏览器 | `node test/prod-ui.mjs` | **7/7** |
@@ -199,4 +199,25 @@
 
 ---
 
-交接完成 · 项目版本 v1.0.0 · 正确性由本次交付的测试与线上冒烟结果担保
+交接完成 · 项目版本 v1.0.1 · 正确性由本次交付的测试与线上冒烟结果担保
+
+---
+
+## 7. 浏览器全量 QA 补充（2026-11-14 晚）
+
+本轮对 v1.0.0 管理后台做了 48 例真实浏览器操作验证（45 通过 / 2 失败 / 1 阻塞），随后完成修复与回归：**49/49、UI 13/13、API 58/58、构建通过**。
+
+- **P1（已修复）**：`#/talks` 说说页整体渲染失败（`debounce is not defined`）→ `src/ui/js/social.js` import 补 `debounce`；后端 `/api/talks` 一直正常。
+- **P2（已修复）**：弹窗遮罩拦截侧栏导航 → `core.js` 的 `renderRoute()` 关闭遗留弹窗 + `closeModal()` 保护 + Esc 关闭，`style.css` 提升 `.sidebar` 层级至 70（高于遮罩 60）。
+- **P3（已处理）**：图床未配置引导条、toast 去重与上限、README/handoff 测试数字统一为 58/58、回归脚本新增 E4。
+- **保留项**：匿名 `/api/me` 的 `default_admin` —— 登录页初始账号提示依赖该字段，风险继续由 README §7 标注。
+- **工具偏差**：`ego-browser` CLI / ego lite 运行时在本机不可用，经用户确认改用 `playwright-core` + 本机 Edge；ego 版复跑脚本状态仍为 **NOT RUN**。
+
+引用（不重复正文）：
+
+- 完整用例表、偏差、修复清单与回归证据：`docs/ego-browser-test-report.md`（§0 状态更新、§11 修复与回归）
+- 机器可读结果：`test/out/browser-qa-report.json`
+- 截图证据：`test/out/qa-*.png`
+- 已执行脚本 / 服务栈 / ego 复跑脚本：`test/browser-qa.mjs`、`test/ego-serve.mjs`、`test/ego-qa.mjs`
+- **版本**：本次修复与版本字段同步为 **v1.0.1**（2026-11-15），对应 Git 标签 `v1.0.1`；页首与 §2.2 的版本号已同步。
+- 待办：**线上 Worker 仍为修复前版本**，需重新 `npm run deploy` 后按 `npm run test:prod` 与 `node test/prod-ui.mjs` 复验。

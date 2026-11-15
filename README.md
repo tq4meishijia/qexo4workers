@@ -5,10 +5,10 @@
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![API e2e](https://img.shields.io/badge/API%20e2e-56%2F56-brightgreen)](docs/test-report.md)
+[![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.0.0-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.0.1-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 **仓库**：<https://github.com/tq4meishijia/qexo4workers> ｜ **示例地址**：<https://qexo.example.com>
@@ -39,7 +39,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.0.0**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.0.1**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -362,4 +362,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.0.0** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.0.1** · 2026-11

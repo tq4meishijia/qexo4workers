@@ -597,8 +597,21 @@ async function renderConfigEditor({ view, query }) {
 
 async function renderImages({ view }) {
   setTitle("图床", [{ text: "媒体" }, { text: "图床" }]);
+  // 未配置图床时上传接口会返回 400；在页面内给出持久引导，避免用户只看到
+  // 一条瞬间消失的 toast 而误判为功能损坏。
+  let hostType = "关闭";
+  try {
+    const s = await api("/api/settings");
+    hostType = JSON.parse(s.settings?.IMG_HOST || "{}").type || "关闭";
+  } catch {
+    /* 读取失败时按未配置处理，仅展示提示，不影响页面其它功能 */
+  }
+  const hostHint = hostType === "关闭"
+    ? '<div class="hint mt" id="img-host-hint" style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-2);color:var(--text);font-size:13px">图床尚未配置，上传接口当前关闭。请先到 <a href="#/settings/image">设置 → 图床</a> 选择类型并保存，再上传图片。</div>'
+    : "";
   view.innerHTML = `
     <div class="card">
+      ${hostHint}
       <div class="toolbar">
         <input id="search" placeholder="搜索图片名或 URL…" style="max-width:300px" />
         <div class="spacer"></div>
