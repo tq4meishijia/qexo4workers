@@ -11,10 +11,6 @@
 [![Version](https://img.shields.io/badge/version-1.0.1-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
-**仓库**：<https://github.com/tq4meishijia/qexo4workers> ｜ **示例地址**：<https://qexo.example.com>
-
-> 真实部署地址由 `PUBLIC_ORIGIN` 或自定义域名决定，**不写入仓库**；运行线上测试时通过环境变量 `QEXO_BASE_URL` 传入（见第 6 节）。
-
 ---
 
 > 无服务器、无容器、零运行时 npm 依赖；Git 仓库仍是唯一内容源，前台主题无需改动即可复用 `/pub/*` 接口。
