@@ -39,7 +39,7 @@ import {
 } from "./auth";
 import { cacheDel } from "./store";
 import { createMcpToken, listMcpTokens, mcpToolCatalog, revokeMcpToken } from "./mcp";
-import { turnstileConfig, verifyTurnstile } from "./turnstile";
+import { TURNSTILE_SWITCH_KEY, turnstileState, turnstilePublicState, verifyTurnstile } from "./turnstile";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -154,7 +154,7 @@ export async function apiAuth(ctx: Ctx): Promise<Response> {
 
   const kind = str(body, "type");
   const verify = str(body, "verify");
-  const turnstile = turnstileConfig(ctx.env);
+  const turnstile = await turnstileState(ctx.env, store);
   const turnstileToken = str(body, "cf-turnstile-response");
   if (turnstile.enabled) {
     // Server-side gate: a client cannot bypass it by omitting `type`.
@@ -187,7 +187,7 @@ export async function apiMe(ctx: Ctx): Promise<Response> {
   const store = new Store(ctx.env);
   const init = toInt(await store.get("INIT", "2"), 2);
   const all = await store.all();
-  const ts = turnstileConfig(ctx.env);
+  const ts = await turnstileState(ctx.env, store);
   return json({
     status: true,
     init,
@@ -767,6 +767,7 @@ export async function apiGetSettings(ctx: Ctx): Promise<Response> {
   const store = new Store(ctx.env);
   const all = await store.all();
   const customs = await ctx.env.DB.prepare("SELECT name, content FROM custom_fields ORDER BY name").all<any>();
+  const ts = await turnstileState(ctx.env, store);
   return json({
     status: true,
     settings: publicSettings(all),
@@ -777,6 +778,7 @@ export async function apiGetSettings(ctx: Ctx): Promise<Response> {
     providers: PROVIDERS.map((p) => ({ name: p, params: PROVIDER_PARAMS[p] })),
     image_hosts: IMAGE_HOSTS.filter((x) => x !== "关闭").map((x) => ({ name: x, params: IMAGE_HOST_PARAMS[x] || {} })),
     version: QEXO_VERSION,
+    turnstile: turnstilePublicState(ts),
   });
 }
 
@@ -867,6 +869,22 @@ export async function apiSetImageHost(ctx: Ctx): Promise<Response> {
   cfg.params = mergeSecrets(cfg.params || {}, prev?.params || {});
   await store.set("IMG_HOST", JSON.stringify(cfg));
   return ok("保存成功");
+}
+
+/** Admin switch: Store.set refreshes the isolate cache, so this is immediate. */
+export async function apiSetTurnstile(ctx: Ctx): Promise<Response> {
+  const body = await readBody(ctx.req);
+  const raw = body.enabled;
+  const on = raw === true || String(raw ?? "") === "是" || String(raw ?? "") === "true";
+  const store = new Store(ctx.env);
+  await store.set(TURNSTILE_SWITCH_KEY, on ? "是" : "否");
+  const state = await turnstileState(ctx.env, store);
+  const msg = !on
+    ? "Turnstile 已关闭，登录恢复原有验证路径"
+    : state.enabled
+      ? "Turnstile 已启用并立即生效"
+      : `开关已保存，但前置条件未满足（缺少 ${state.missing.join("、")}），当前仍未生效`;
+  return json({ status: true, msg, turnstile: turnstilePublicState(state) });
 }
 
 export async function apiSetUser(ctx: Ctx): Promise<Response> {

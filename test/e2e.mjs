@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.3.0", "runtime version mismatch");
+  assert.equal(me.data.version, "1.4.0", "runtime version mismatch");
   assert.equal(me.data.turnstile?.enabled, false, "Turnstile must stay disabled without operator secrets");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
@@ -583,6 +583,34 @@ await step("settings: 基本信息与安全（含 API 密钥）", async () => {
   assert.equal(s.data.settings.WEBHOOK_APIKEY, "******");
 });
 
+await step("settings: Turnstile 开关默认关闭且状态清晰", async () => {
+  const s = await api.get("/api/settings");
+  const t = s.data.turnstile;
+  assert.equal(t.switch_on, false);
+  assert.equal(t.configured, false);
+  assert.equal(t.effective, false);
+  assert.ok(t.missing.includes("TURNSTILE_SECRET"), JSON.stringify(t.missing));
+  assert.ok(t.missing.includes("TURNSTILE_HOSTNAMES"), JSON.stringify(t.missing));
+  assert.equal(t.site_key, "0x4AAAAAAGBqe3KzCG_zIoD7");
+  assert.equal(s.data.settings.TURNSTILE_ENABLED ?? "否", "否");
+  return `missing=${t.missing.join(",")}`;
+});
+
+await step("settings: Turnstile 开关切换即时回显与前置条件提示", async () => {
+  const on = await api.post("/api/settings/turnstile", { enabled: "是" });
+  assert.equal(on.data.status, true, JSON.stringify(on.data));
+  assert.equal(on.data.turnstile.switch_on, true);
+  assert.equal(on.data.turnstile.effective, false, "前置条件未满足时不应生效");
+  assert.ok(on.data.msg.includes("前置条件"), on.data.msg);
+  const mid = await api.get("/api/settings");
+  assert.equal(mid.data.turnstile.switch_on, true, "开关状态未即时回显");
+  const off = await api.post("/api/settings/turnstile", { enabled: "否" });
+  assert.equal(off.data.status, true, JSON.stringify(off.data));
+  assert.equal(off.data.turnstile.switch_on, false);
+  assert.ok(off.data.msg.includes("已关闭"), off.data.msg);
+  return "开启/关闭即时回显，前置条件缺失时不生效";
+});
+
 await step("settings: 旧版表单接口（set_abbrlink / set_cdn）", async () => {
   // Qexo sent application/x-www-form-urlencoded here.
   const form = new URLSearchParams({ alg: "crc32", rep: "hex" });
@@ -864,7 +892,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.3.0",
+    appVersion: "1.4.0",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

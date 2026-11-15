@@ -51,7 +51,7 @@ Provider 的 GitHub Token、图床密钥不放在环境变量里，而是登录�
 
 ### 3.1 登录页 Turnstile（使用已创建的 widget）
 
-站点 key `0x4AAAAAAGBqe3KzCG_zIoD7` 是公开值，已写入 `wrangler.toml` / `wrangler.prod.toml` 的 `[vars]`；widget 已在 Cloudflare 创建，本项目不创建或替换 widget。登录保护在以下三项**同时存在**时自动启用，缺任一时保持原有登录 / reCAPTCHA 路径，不会锁死后台。
+站点 key `0x4AAAAAAGBqe3KzCG_zIoD7` 是公开值，已写入 `wrangler.toml` / `wrangler.prod.toml` 的 `[vars]`；widget 已在 Cloudflare 创建，本项目不创建或替换 widget。登录保护需要「以下三项环境变量齐备」**并且**「设置 → 安全」页的 Turnstile 开关处于开启状态；开关默认关闭。任一条件不满足时保持原有登录 / reCAPTCHA 路径，不会锁死后台。
 
 | 变量 | 说明 | 存放位置 |
 |---|---|---|
@@ -65,6 +65,12 @@ wrangler secret put TURNSTILE_HOSTNAMES --config wrangler.prod.toml
 ```
 
 密钥值从 Cloudflare Dashboard 的 widget 详情获取，由部署者在上述命令的交互提示中输入；仓库、文档与日志都不包含它。服务端在 `/api/auth` 内调用 `https://challenges.cloudflare.com/turnstile/v0/siteverify`，要求 `success === true`、`action === login`、`hostname` 在白名单内；浏览器只加载 widget 并提交 `cf-turnstile-response`，绝不直接调用 siteverify。`TURNSTILE_VERIFY_URL` 是本地测试注入点，生产不要设置。本地验证用 `node test/turnstile.mjs`（mock siteverify，覆盖重放与绕过）。
+
+### 3.2 在后台启用与验证
+
+配置完三项环境变量后，进入 **设置 → 安全**：卡片会显示开关状态、前置条件是否已满足、以及实际是否生效。确认前置条件显示「已满足」后打开开关，切换会立即保存并即时生效，卡片内与提示条给出反馈；关闭开关会立即恢复原有登录路径。开关旁的 **「如何启用」** 在当前页面内以浮层展示完整步骤（前置条件、配置命令、验证方法），不跳转或打开任何外部站点。
+
+验证：强制刷新登录页，确认 Turnstile 控件出现并完成一次登录；同一 token 重放会被拒绝。若控件未出现，先检查 widget 的 Hostname Management 是否覆盖实际访问域名（添加根域名会自动授权子域名），再检查 `TURNSTILE_HOSTNAMES` 是否与 Siteverify 返回的 hostname 完全一致。
 
 ## 4. 部署 Worker
 

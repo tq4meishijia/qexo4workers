@@ -311,6 +311,42 @@ await step("ui: 内容源图床下拉/自定义前缀/优先级预览", async ()
   return `${presets.length} 个预设 · 自定义优先级与回填已验证`;
 });
 
+await step("ui: 安全页 Turnstile 开关与页内启用说明", async () => {
+  await page.goto(base + "/#/settings/security");
+  await page.waitForSelector("#ts-enabled");
+  assert.equal(await page.isChecked("#ts-enabled"), false, "默认应为关闭");
+  assert.ok(((await page.textContent("#ts-tag")) || "").includes("已关闭"));
+  const summary = (await page.textContent("#ts-summary")) || "";
+  assert.ok(summary.includes("前置条件") && summary.includes("未生效"), summary);
+
+  await page.click("#ts-howto");
+  await page.waitForSelector("#modal:not([hidden])");
+  const modalText = (await page.textContent("#modal-body")) || "";
+  assert.ok(modalText.includes("前置条件") && modalText.includes("wrangler secret put"), modalText.slice(0, 200));
+  const links = await page.$$eval("#modal-body a", (els) => els.length);
+  assert.equal(links, 0, "说明浮层不应包含外链");
+  await page.click("#modal-foot button");
+  await page.waitForFunction(() => document.getElementById("modal")?.hidden === true, null, { timeout: 10000 });
+  assert.equal(await page.isChecked("#ts-enabled"), false, "关闭弹窗后开关状态应保持");
+
+  await page.click("#ts-enabled");
+  await page.waitForFunction(
+    () => (document.getElementById("ts-status")?.textContent || "").includes("前置条件"),
+    null,
+    { timeout: 10000 },
+  );
+  assert.ok(((await page.textContent("#ts-tag")) || "").includes("已开启"), "开启后徽标未更新");
+  assert.equal(await page.isChecked("#ts-enabled"), true);
+
+  await page.click("#ts-enabled");
+  await page.waitForFunction(
+    () => (document.getElementById("ts-tag")?.textContent || "").includes("已关闭"),
+    null,
+    { timeout: 10000 },
+  );
+  return "默认可见 / 页内说明无外链 / 即时反馈 / 关闭保持状态";
+});
+
 await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
   await page.goto(base + "/#/mcp");
   await page.waitForSelector("#new-token");

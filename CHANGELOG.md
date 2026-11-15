@@ -4,6 +4,18 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.4.0 — 2026-11-15（MINOR）
+
+**新增：设置 → 安全 页的 Turnstile 功能开关与页内启用说明**
+
+- 新增独立卡片，复用现有 `.card` / `.tag` / `.link-btn` / `.picker-status` 组件：默认状态（开关、前置条件、实际生效）明确可见；开启但前置条件未满足时显示「已开启 · 未生效」并列出缺失变量。
+- 开关切换立即调用 `POST /api/settings/turnstile` 保存，`Store.set` 刷新隔离缓存即时生效；卡片内状态徽标、摘要与提示行同步更新并给出 toast 反馈；保存失败自动回滚勾选状态。
+- 开关旁「如何启用」通过 `openModal()` 在当前页面内展示完整步骤（前置条件、配置命令、配置要点、验证方法），不含任何外部链接；关闭按钮与 Esc 均可关闭，关闭后页面表单状态不变。
+- 后端：`TURNSTILE_ENABLED` 默认「否」；`/api/settings` 下发 `switch_on` / `configured` / `effective` / `missing` / `site_key`（不返回密钥值）；`apiAuth` 与 `apiMe` 改用「前置条件齐备 + 开关开启」的实际生效判定。
+- **启用路径变更**：此前为「三项环境变量齐备即启用」，现在还需在「设置 → 安全」打开开关。README、部署手册与页内说明已同步；已配置但未开开关的实例保持原有登录路径，不会被锁死。
+
+**验证**：`npm test` 67/67、`npm run test:ui` 20/20、`node test/turnstile.mjs` 11/11（默认关闭免 token、开启后强制校验、关闭后立即恢复）、`browser-qa.mjs` 49/49、`tsc --noEmit` 与 `deploy:dry` 通过。
+
 ## v1.3.0 — 2026-11-15（MINOR）
 
 **新增：登录页接入 Cloudflare Turnstile（现有 widget）**

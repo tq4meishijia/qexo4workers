@@ -57,6 +57,22 @@ async function issue(query = "") {
 
 const login = (extra = {}) => post("/api/auth", { username: "admin", password: "admin123", ...extra });
 
+let cookie = "";
+let csrf = "";
+
+async function authedGet(path) {
+  const res = await fetch(base + path, { headers: cookie ? { Cookie: cookie } : {} });
+  return res.json();
+}
+
+async function authedPost(path, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (cookie) headers.Cookie = cookie;
+  if (csrf) headers["X-CSRF-Token"] = csrf;
+  const res = await fetch(base + path, { method: "POST", headers, body: JSON.stringify(body) });
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
 async function expectDenied(label, extra) {
   const r = await login(extra);
   assert.notEqual(r.status, 429, `${label}: 触发限流，结果不可信`);
@@ -68,9 +84,27 @@ console.log("\nTurnstile login integration\n" + "=".repeat(52));
 
 let validToken = "";
 
-await step("配置：/api/me 下发 sitekey 且启用", async () => {
-  const me = await fetch(base + "/api/me").then((r) => r.json());
-  assert.equal(me.turnstile?.enabled, true, JSON.stringify(me.turnstile));
+await step("默认：开关关闭，登录走原有路径", async () => {
+  const me = await authedGet("/api/me");
+  assert.equal(me.turnstile?.enabled, false, JSON.stringify(me.turnstile));
+  const r = await login({});
+  assert.equal(r.data.status, true, JSON.stringify(r.data));
+  cookie = r.headers.get("set-cookie")?.split(";")[0] || "";
+  const meAfter = await authedGet("/api/me");
+  csrf = meAfter.csrf || "";
+  assert.ok(cookie && csrf, "会话或 CSRF 缺失");
+  return "默认关闭时无需 Turnstile token";
+});
+
+await step("开启开关后立即生效（前置条件已齐备）", async () => {
+  const on = await authedPost("/api/settings/turnstile", { enabled: "是" });
+  assert.equal(on.data.status, true, JSON.stringify(on.data));
+  assert.equal(on.data.turnstile.switch_on, true);
+  assert.equal(on.data.turnstile.configured, true);
+  assert.equal(on.data.turnstile.effective, true, JSON.stringify(on.data.turnstile));
+  assert.ok(on.data.msg.includes("立即生效"), on.data.msg);
+  const me = await authedGet("/api/me");
+  assert.equal(me.turnstile.enabled, true);
   assert.equal(me.turnstile.site_key, SITEKEY);
   return `site_key=${me.turnstile.site_key}`;
 });
@@ -129,6 +163,17 @@ await step("错误密码仍被拒绝（原登录逻辑保留）", async () => {
   assert.equal(r.data.status, false, JSON.stringify(r.data));
   assert.ok(String(r.data.msg).includes("密码"), JSON.stringify(r.data));
   return r.data.msg;
+});
+
+await step("关闭开关后立即恢复原有登录路径", async () => {
+  const off = await authedPost("/api/settings/turnstile", { enabled: "否" });
+  assert.equal(off.data.status, true, JSON.stringify(off.data));
+  assert.equal(off.data.turnstile.switch_on, false);
+  assert.equal(off.data.turnstile.configured, true, "环境变量仍应齐备");
+  assert.equal(off.data.turnstile.effective, false);
+  const me = await authedGet("/api/me");
+  assert.equal(me.turnstile.enabled, false);
+  return "前置条件齐备但开关关闭时不生效";
 });
 
 console.log("=".repeat(52));

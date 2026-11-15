@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.3.0** |
+| 项目版本 | **1.4.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -289,4 +289,18 @@
 - **验证**：`node test/turnstile.mjs` 9/9（真实 `/api/auth` + mock siteverify，覆盖成功 / 无 token / 伪造 / 重放 / action / hostname / 绕过 / 错误密码）；`npm test` 65/65、`npm run test:ui` 19/19、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（479.08 KiB / gzip 101.99 KiB）。
 - **待完成**：真实 Turnstile token 的端到端验证需要生产密钥与真实浏览器；本地用 mock 端点，未声称线上端到端通过。线上 Worker 未部署。
 - **发布**：提交并推送 `main`，附注标签 `v1.3.0`。
+
+---
+
+## 13. v1.4.0 发布（2026-11-15）
+
+- **类型**：`MINOR`（新增安全页 Turnstile 开关与页内说明浮层），由 `v1.3.0` 递增。
+- **需求**：开关默认状态明确可见、切换即时生效并在页面内反馈；开关旁「如何启用」以当前页面内浮层展示完整步骤且不跳转外部站点；弹窗可关闭且保持页面状态；组件样式与交互和现有安全页一致。
+- **实现**：
+  - `src/turnstile.ts`：拆分 `TurnstilePrereq` / `TurnstileConfig`，`turnstileState()` 读取 D1 开关，`turnstilePublicState()` 只下发布尔值与缺失变量名。
+  - `src/api-app.ts`：`apiGetSettings` 下发状态；新增 `apiSetTurnstile()`；`apiAuth` / `apiMe` 改用实际生效判定。`src/index.ts` 注册 `POST /api/settings/turnstile`；`src/store.ts` 增加 `TURNSTILE_ENABLED` 默认「否」。
+  - `src/ui/js/settings.js`：新增 `turnstileCard()` / `turnstileHowtoHtml()` / `applyTurnstileState()`，复用 `openModal()`、`.tag`、`.link-btn`、`.picker-status`；切换即保存，失败回滚勾选状态。
+- **启用路径变更**：三项环境变量齐备之外还需打开后台开关；README §2.3 / 注意事项、`docs/deploy.md` §3.1–3.2 与页内浮层已同步。
+- **验证**：`npm test` 67/67、`npm run test:ui` 20/20、`node test/turnstile.mjs` 11/11、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（480.88 KiB / gzip 102.49 KiB）。
+- **发布**：提交并推送 `main`，附注标签 `v1.4.0`。
 

@@ -342,6 +342,82 @@ function bindImageTab(s) {
 /* security                                                           */
 /* ------------------------------------------------------------------ */
 
+function turnstileSummary(t) {
+  const sw = t.switch_on ? "开启" : "关闭";
+  const cfg = t.configured ? "已满足" : `未满足（缺少 ${(t.missing || []).join("、") || "必要配置"}）`;
+  const eff = t.effective ? "已生效" : "未生效";
+  return `当前状态：开关 ${sw} · 前置条件 ${cfg} · 实际 ${eff}。仅当开关开启且三项环境变量齐备时，登录页才会渲染控件并强制校验。`;
+}
+
+function applyTurnstileState(t, message = "", kind = "") {
+  const tagInfo = t.effective ? ["ok", "已生效"] : t.switch_on ? ["warn", "已开启 · 未生效"] : ["", "已关闭"];
+  const tag = document.getElementById("ts-tag");
+  const summary = document.getElementById("ts-summary");
+  const status = document.getElementById("ts-status");
+  if (tag) {
+    tag.className = `tag ${tagInfo[0]}`.trim();
+    tag.textContent = tagInfo[1];
+  }
+  if (summary) summary.textContent = turnstileSummary(t);
+  if (status) {
+    status.className = `picker-status${kind ? ` ${kind}` : ""}`;
+    status.textContent = message;
+  }
+}
+
+function turnstileHowtoHtml() {
+  return `
+    <p class="hint">Turnstile 是 Cloudflare 的人机验证组件。浏览器只生成 token，校验由本服务端调用 Siteverify 完成；Secret key 不会出现在页面中。</p>
+    <div class="hr"></div>
+    <p class="hint"><b>一、前置条件</b></p>
+    <ol class="hint" style="line-height:1.85;padding-left:20px;margin:0">
+      <li>已在 Cloudflare 创建 widget，取得 <b>Site key</b>（公开值）与 <b>Secret key</b>（私有，仅放服务端）。</li>
+      <li>widget 的 Hostname Management 覆盖实际访问域名；添加根域名会自动授权其所有子域名。</li>
+      <li>生产 Worker 齐备三项：<code>TURNSTILE_SITE_KEY</code>（公开，可放配置文件的 <code>[vars]</code>）、<code>TURNSTILE_SECRET</code>、<code>TURNSTILE_HOSTNAMES</code>。</li>
+    </ol>
+    <div class="hr"></div>
+    <p class="hint"><b>二、配置命令（部署机执行，值在交互提示中输入）</b></p>
+    <pre class="mono" style="background:var(--bg-2);border:1px solid var(--border-soft);border-radius:8px;padding:10px;white-space:pre-wrap;margin:0">wrangler secret put TURNSTILE_SECRET --config wrangler.prod.toml
+wrangler secret put TURNSTILE_HOSTNAMES --config wrangler.prod.toml</pre>
+    <ul class="hint" style="line-height:1.85;padding-left:20px;margin:8px 0 0">
+      <li><code>TURNSTILE_HOSTNAMES</code> 填管理后台域名，多个用逗号分隔；<b>生产不得包含 localhost / 127.0.0.1</b>，且需与 Siteverify 返回的 hostname 完全一致。</li>
+      <li><code>TURNSTILE_VERIFY_URL</code> 仅为本地测试注入点，生产保持未设置。</li>
+      <li><code>wrangler secret put</code> 会自动创建新 Worker 版本，无需重新部署；改变的是配置，不是程序版本号。</li>
+    </ul>
+    <div class="hr"></div>
+    <p class="hint"><b>三、在本页启用与验证</b></p>
+    <ol class="hint" style="line-height:1.85;padding-left:20px;margin:0">
+      <li>前置条件显示「已满足」后打开本页开关；切换会立即保存并即时生效，本卡片内给出反馈。</li>
+      <li>强制刷新登录页确认控件出现，完成一次登录；同一 token 重放会被拒绝。</li>
+      <li>关闭开关会立即恢复原有登录 / reCAPTCHA 路径，不会锁死后台。</li>
+    </ol>
+    <p class="hint mt">密钥请勿写入仓库或聊天。本说明为页内浮层，不会跳转或打开外部站点。</p>`;
+}
+
+function turnstileCard(s) {
+  const t = s.turnstile || { switch_on: false, configured: false, effective: false, missing: [] };
+  const tagCls = t.effective ? "ok" : t.switch_on ? "warn" : "";
+  const tagText = t.effective ? "已生效" : t.switch_on ? "已开启 · 未生效" : "已关闭";
+  return `<div class="card">
+    <div class="card-head">
+      <div><h3>Cloudflare Turnstile</h3><div class="sub">登录页人机验证 · 服务端校验 token</div></div>
+      <span class="tag ${tagCls}" id="ts-tag">${tagText}</span>
+    </div>
+    <div class="field">
+      <div class="field-head">
+        <span>功能开关（切换后立即保存）</span>
+        <span class="field-tools"><button type="button" class="link-btn" id="ts-howto">如何启用</button></span>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center">
+        <input type="checkbox" id="ts-enabled" style="width:auto" ${t.switch_on ? "checked" : ""} />
+        <span style="margin:0">启用 Turnstile 登录验证</span>
+      </label>
+      <div class="picker-note" id="ts-summary">${esc(turnstileSummary(t))}</div>
+      <div class="picker-status" id="ts-status"></div>
+    </div>
+  </div>`;
+}
+
 function securityTab(s) {
   const v = s.settings;
   return `<div class="card">
@@ -366,7 +442,8 @@ function securityTab(s) {
       hint: "已设置时显示为空；留空保持不变。密钥仅以 SHA-256 存储，无法回显。",
     })}
     <button class="btn primary" id="save-security">保存</button>
-  </div>`;
+  </div>
+  ${turnstileCard(s)}`;
 }
 
 function bindSecurityTab() {
@@ -392,6 +469,39 @@ function bindSecurityTab() {
       toast(e.message, "err");
     }
   };
+
+  const tsSwitch = document.getElementById("ts-enabled");
+  if (tsSwitch) {
+    tsSwitch.onchange = async () => {
+      tsSwitch.disabled = true;
+      const status = document.getElementById("ts-status");
+      status.className = "picker-status loading";
+      status.textContent = "正在保存…";
+      try {
+        const res = await api("/api/settings/turnstile", {
+          method: "POST",
+          body: { enabled: tsSwitch.checked ? "是" : "否" },
+        });
+        const t = res.turnstile;
+        applyTurnstileState(t, res.msg, t.effective ? "ok" : t.switch_on ? "err" : "");
+        toast(res.msg, t.effective || !t.switch_on ? "ok" : "warn");
+        await loadSettings(true);
+      } catch (e) {
+        tsSwitch.checked = !tsSwitch.checked;
+        status.className = "picker-status err";
+        status.textContent = `保存失败：${e.message}`;
+        toast(e.message, "err");
+      } finally {
+        tsSwitch.disabled = false;
+      }
+    };
+    document.getElementById("ts-howto").onclick = () =>
+      openModal({
+        title: "如何启用 Turnstile",
+        body: turnstileHowtoHtml(),
+        buttons: [{ label: "关闭", cls: "ghost" }],
+      });
+  }
 }
 
 /* ------------------------------------------------------------------ */
