@@ -352,4 +352,5 @@
 - **样式**：新增 `.btn.is-loading` / `.btn.is-error` / `.is-locked` / `.tag.just-changed` / `tr.row-flash.ok` / `tr.row-flash.err` 与 `tagPop` / `cellOk` / `cellErr` / `nudge` 四个关键帧；颜色全部取自 `--ok-soft` / `--danger-soft` 等既有令牌，时长用 `--dur-feedback` 与 `--ease`，未引入新的主题变量。
 - **测试**：新增 `test/status-fx.mjs`（需要 `node test/ego-serve.mjs` 常驻），9 项断言覆盖加载态、成功、转回草稿、失败、连点、未变化与其他操作不受影响。
 - **已知边界**：`prefers-reduced-motion` 下关闭位移动画；状态列 `aria-live="polite"` 逐行播报，未额外引入全局播报区。
+- **发布**：推送 `f5d7de8` 后，流水线 run #3 判定正确（`版本 1.5.1 → 1.6.0，且 v1.6.0 未发布，执行发布`），但在「检查部署凭据」步骤因缺少 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 中止，未产生标签或半成品部署——这是门禁与凭据检查按设计的表现。随后本地兜底完成发布：`npm run deploy`（`Current Version ID` `794efa8f-e2ce-4305-90f4-6da0fc289038`，线上 `appVersion = "1.6.0"`）、推送附注标签 `v1.6.0`（`40b50de`）、`gh release create` 创建 Release。配置两个 Secrets 后，下一次版本变更将由流水线自动完成全链路。
 
