@@ -320,3 +320,16 @@
 - **验证**：`npm test` 69/69、`npm run test:ui` 20/20、`node test/turnstile.mjs` 12/12、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过（483.64 KiB / gzip 103.11 KiB）。
 - **发布**：提交并推送 `main`，附注标签 `v1.5.0`。
 
+## 15. v1.5.1 发布（2026-11-17）
+
+- **类型**：`PATCH`（文章页发布报 `GitHub API 404 … get-repository-content`），由 `v1.5.0` 递增。
+- **现场证据**：生产 D1 `content_index` 存在 `draft · source/_drafts/qexo-for-workers-recommendation.md`（`updated_at` 2026-11-17 12:20:10Z），但 `tq4meishijia/hexo` 仓库已无 `source/_drafts/` 目录；同名文件已在 12:52:52Z 由 `Publish Post qexo-for-workers-recommendation` 提交写入 `source/_posts/`，12:52:53Z `Delete Draft` 删除草稿。索引未随该次发布更新，再次点击「发布」时 `getFile()` 命中 404，错误体被原样透传。
+- **实现**：
+  - `src/vcs.ts`：抽出 `readContent()`，`getFile()` / `getBytes()` 的 404 统一转为「文件不存在：<repo 内路径>（仓库 <owner/repo>，分支 <branch>）」，其余状态码保持 502。
+  - `src/content.ts`：`publish()` / `unpublish()` 幂等化——源文件 404 时先查目标位置（已存在则修索引并返回 `already: true`），再按名字在实时 tree 中重定位（`findByName()`，支持 `archive/name.md` 场景），都不命中才返回可读 404。新增 `reindex()` 统一写入新行并删除旧行。
+  - `src/content.ts`：`indexed()` 增加索引与 tree 的一致性校验，指向已删文件的残留行自动清除；`listPosts()` / `listPages()` 共用一次 `tree()`，tree 获取失败时跳过校验。
+  - `src/api-app.ts`：发布/转草稿的响应增加 `already` 与对应提示语（「文章已是发布状态，索引已同步」）。
+- **验证**：`npm test` 72/72（新增重复发布幂等、草稿改名后重定位、草稿缺失可读错误三项）、`npm run test:ui` 20/20、`node test/turnstile.mjs` 12/12、`browser-qa.mjs` 49/49、`tsc --noEmit`、`deploy:dry` 通过。
+- **发布**：提交 `f2096d7` 并推送 `main`，附注标签 `v1.5.1`（`e5306be`）；随后部署生产 Worker，`Current Version ID` `80511ed7-1c86-4c38-a398-8dea33af4a1d`，线上静态资源 `appVersion = "1.5.1"`。按 2026-11-17 新约定，此后每次代码变更提交推送后立即部署，不再单独确认。
+- **线上即时恢复（无需部署）**：在「文章」页点击「刷新索引」即可清掉幽灵草稿行，该文章会以 `source/_posts/qexo-for-workers-recommendation.md` 的已发布状态重新出现。
+
