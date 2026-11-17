@@ -464,6 +464,50 @@ td.actions .btn { margin-left: 4px; }
 .toast.warn { border-color: var(--warn-border); }
 @keyframes slide { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* ---------------- 文章状态切换反馈（发布 / 转草稿） ----------------
+   仅服务于两类状态迁移：按钮加载、行内成功高亮、失败抖动与状态标签入场。
+   动画只改 transform / opacity / background-color，时长统一取自主题 token，
+   主题切换时与全站按钮一起换档。 */
+.btn.is-loading { cursor: progress; }
+.btn.is-loading .spin {
+  width: 12px; height: 12px; border-width: 2px;
+  border-color: var(--spin-track); border-top-color: currentColor;
+}
+.btn.is-error {
+  border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger-fg);
+  animation: nudge 220ms var(--ease);
+}
+/* 进行中的行：其余操作一并锁住，避免同一篇文章并发提交 */
+.is-locked { opacity: .45; pointer-events: none; }
+
+.tag.just-changed { animation: tagPop 260ms var(--ease); }
+
+tr.row-flash.ok td { animation: cellOk 1500ms var(--ease); }
+tr.row-flash.err td { animation: cellErr 900ms var(--ease); }
+
+@keyframes tagPop {
+  0% { transform: scale(.86); opacity: .45; }
+  60% { transform: scale(1.05); }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes cellOk {
+  0%, 55% { background-color: var(--ok-soft); }
+  100% { background-color: transparent; }
+}
+@keyframes cellErr {
+  0%, 45% { background-color: var(--danger-soft); }
+  100% { background-color: transparent; }
+}
+@keyframes nudge {
+  0%, 100% { transform: none; }
+  30% { transform: translateX(-2px); }
+  70% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag.just-changed, tr.row-flash.ok td, tr.row-flash.err td, .btn.is-error { animation: none; }
+  .btn.is-loading .spin { animation-duration: 2s; }
+}
+
 /* ---------------- misc ---------------- */
 .kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 14px; font-size: 13px; }
 .kv dt { color: var(--muted); }

@@ -35,6 +35,38 @@ async function renderPosts({ view, query }) {
     </div>`;
 
   let items = [];
+  // 文章名 → { phase: pending|success|noop|error, action, message, timer }
+  // 只记录发布 / 转草稿两类操作，重命名与删除不进入这里。
+  const rowFx = new Map();
+  const FX_HOLD = { success: 1600, noop: 1400, error: 3600 };
+
+  /** 状态列：按当前反馈阶段渲染加载 / 成功 / 失败 / 未变化。 */
+  const statusTagWithFx = (status, fx) => {
+    if (!fx) return STATUS_TAG(status);
+    if (fx.phase === "pending") {
+      return `<span class="tag info">${fx.action === "publish" ? "发布中" : "转回中"}</span>`;
+    }
+    if (fx.phase === "noop") {
+      return `${STATUS_TAG(status)}<span class="tag info">未变化</span>`;
+    }
+    if (fx.phase === "error") {
+      return `<span class="tag err" title="${esc(fx.message || "操作失败")}">失败</span>`;
+    }
+    // 成功：状态标签已迁移，给新标签一次入场动画
+    return STATUS_TAG(status).replace('class="tag', 'class="tag just-changed');
+  };
+
+  /** 反馈保留一段时间后清除，再与服务端对齐；避免重绘打断动画。 */
+  const clearFx = (name, ms) => {
+    const fx = rowFx.get(name);
+    if (!fx) return;
+    if (fx.timer) clearTimeout(fx.timer);
+    fx.timer = setTimeout(() => {
+      rowFx.delete(name);
+      if (location.hash.startsWith("#/posts")) load();
+    }, ms);
+  };
+
   const draw = () => {
     if (!location.hash.startsWith("#/posts")) return;
     const listEl = document.getElementById("list");
@@ -53,20 +85,34 @@ async function renderPosts({ view, query }) {
       </div>
       ${rows.length ? `<div class="table-wrap"><table>
         <thead><tr><th>标题 / 文件名</th><th>状态</th><th>路径</th><th>大小</th><th style="text-align:right">操作</th></tr></thead>
-        <tbody>${rows.map((r) => `
-          <tr>
-            <td><a href="#/editor?path=${encodeURIComponent(r.path)}&status=${r.status ? 1 : 0}&type=post"><strong>${esc(r.title || r.name)}</strong></a>
+        <tbody>${rows.map((r) => {
+          const fx = rowFx.get(r.name);
+          const busy = fx?.phase === "pending";
+          const label = busy
+            ? fx.action === "publish" ? "发布中" : "转回中"
+            : r.status ? "转草稿" : "发布";
+          const rowCls = fx?.phase === "success" ? " row-flash ok" : fx?.phase === "error" ? " row-flash err" : "";
+          const lock = busy ? " is-locked" : "";
+          const off = busy ? "disabled" : "";
+          return `
+          <tr class="post-row${rowCls}">
+            <td><a class="${lock.trim()}" href="#/editor?path=${encodeURIComponent(r.path)}&status=${r.status ? 1 : 0}&type=post"><strong>${esc(r.title || r.name)}</strong></a>
               <div class="hint mono">${esc(r.fullname || r.name)}</div></td>
-            <td>${STATUS_TAG(r.status)}</td>
+            <td class="status-cell" aria-live="polite">${statusTagWithFx(r.status, fx)}</td>
             <td class="mono" style="color:var(--muted);font-size:12px">${esc(r.path)}</td>
             <td>${r.size ? Math.round(r.size / 1024) + " KB" : "—"}</td>
             <td class="actions">
-              <a class="btn sm" href="#/editor?path=${encodeURIComponent(r.path)}&status=${r.status ? 1 : 0}&type=post">编辑</a>
-              <button class="btn sm" data-act="${r.status ? "unpublish" : "publish"}" data-path="${esc(r.path)}">${r.status ? "转草稿" : "发布"}</button>
-              <button class="btn sm" data-act="rename" data-path="${esc(r.path)}">重命名</button>
-              <button class="btn sm danger" data-act="delete" data-path="${esc(r.path)}">删除</button>
+              <a class="btn sm${lock}" href="#/editor?path=${encodeURIComponent(r.path)}&status=${r.status ? 1 : 0}&type=post">编辑</a>
+              <button class="btn sm${busy ? " is-loading" : ""}${fx?.phase === "error" ? " is-error" : ""}"
+                data-act="${r.status ? "unpublish" : "publish"}" data-path="${esc(r.path)}" data-name="${esc(r.name)}"
+                ${busy ? 'disabled aria-busy="true"' : ""}>
+                ${busy ? '<span class="spin" aria-hidden="true"></span>' : ""}${label}
+              </button>
+              <button class="btn sm" data-act="rename" data-path="${esc(r.path)}" data-name="${esc(r.name)}" ${off}>重命名</button>
+              <button class="btn sm danger" data-act="delete" data-path="${esc(r.path)}" data-name="${esc(r.name)}" ${off}>删除</button>
             </td>
-          </tr>`).join("")}
+          </tr>`;
+        }).join("")}
         </tbody></table></div>` : `<div class="empty"><strong>这里还没有文章</strong>点击右上角新建一篇</div>`}`;
 
     document.getElementById("new").onclick = newPost;
@@ -76,7 +122,7 @@ async function renderPosts({ view, query }) {
       else filterRows("#list tbody tr", e.target.value);
     };
     document.querySelectorAll("[data-act]").forEach((btn) => {
-      btn.onclick = () => act(btn.dataset.act, btn.dataset.path);
+      btn.onclick = () => act(btn.dataset.act, btn.dataset.path, btn.dataset.name);
     });
   };
 
@@ -123,18 +169,48 @@ async function renderPosts({ view, query }) {
     });
   };
 
-  const act = async (kind, path) => {
+  /** 发布 / 转草稿：行内加载反馈 + 结果动画，连续点击直接忽略。 */
+  const changeStatus = async (kind, path, name) => {
+    if (rowFx.get(name)?.phase === "pending") {
+      toast("正在提交，请稍候", "warn", 1200);
+      return;
+    }
+    rowFx.set(name, { phase: "pending", action: kind });
+    draw();
+    try {
+      const res = await api(kind === "publish" ? "/api/publish" : "/api/unpublish", {
+        method: "POST",
+        body: { file: path },
+      });
+      const status = kind === "publish";
+      const before = items.find((i) => i.name === name);
+      const nextPath = res.path || path;
+      // 后端标记 already，或本地比对确认状态/路径都没变 → 按「未变化」反馈，
+      // 不播放状态迁移动画。
+      const noop = Boolean(res.already) || (before && before.status === status && before.path === nextPath);
+      items = items.map((i) => (i.name === name ? { ...i, path: nextPath, status } : i));
+      rowFx.set(name, { phase: noop ? "noop" : "success", action: kind, message: res.msg });
+      toast(res.msg || (status ? "发布成功" : "已转为草稿"), noop ? "" : "ok");
+      draw();
+      clearFx(name, noop ? FX_HOLD.noop : FX_HOLD.success);
+    } catch (e) {
+      rowFx.set(name, { phase: "error", action: kind, message: e.message });
+      toast(e.message, "err");
+      draw();
+      clearFx(name, FX_HOLD.error);
+    }
+  };
+
+  const act = async (kind, path, name) => {
+    if (kind === "publish" || kind === "unpublish") {
+      await changeStatus(kind, path, name);
+      return;
+    }
     try {
       if (kind === "delete") {
         if (!(await confirmDialog(`确定删除 ${path} 吗？该操作会直接提交到仓库，不可回退。`))) return;
         await api("/api/delete", { method: "POST", body: { file: path } });
         toast("删除成功", "ok");
-      } else if (kind === "publish") {
-        await api("/api/publish", { method: "POST", body: { file: path } });
-        toast("发布成功", "ok");
-      } else if (kind === "unpublish") {
-        await api("/api/unpublish", { method: "POST", body: { file: path } });
-        toast("已转为草稿", "ok");
       } else if (kind === "rename") {
         openModal({
           title: "重命名",

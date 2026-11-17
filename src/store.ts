@@ -9,7 +9,7 @@
 import type { Env } from "./lib";
 import { nowSec } from "./lib";
 
-export const QEXO_VERSION = "1.5.1";
+export const QEXO_VERSION = "1.6.0";
 export const QEXO_STATIC = "4.0.1";
 
 export const DEFAULT_SETTINGS: Record<string, string> = {

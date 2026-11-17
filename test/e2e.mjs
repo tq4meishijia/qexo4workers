@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.5.1", "runtime version mismatch");
+  assert.equal(me.data.version, "1.6.0", "runtime version mismatch");
   assert.equal(me.data.turnstile?.enabled, false, "Turnstile must stay disabled without operator secrets");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
@@ -989,7 +989,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.5.1",
+    appVersion: "1.6.0",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

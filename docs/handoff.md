@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.5.1** |
+| 项目版本 | **1.6.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -342,4 +342,14 @@
 - **配置项**：`VERSION_FILE` / `VERSION_KIND`（json|regex）/ `VERSION_JSON_PATH` / `VERSION_REGEX` / `TAG_PREFIX` / `CHANGELOG_FILE` 均可用仓库 Variables 覆盖，YAML 内已给出默认值。需要的 Secrets 为 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`；可选 Variables 为 `VERIFY_URL`、`RUN_D1_MIGRATIONS`。
 - **本地验证**：`detect` 四条路径（版本未变 + 标签已存在 → 跳过；版本变化 + 标签已存在 → 跳过；模拟未发布 → 发布；`force` → 强制发布）与 `notes 1.5.1` 提取（806 字符）均按预期；YAML 用 `yaml` 解析通过，`npm ci --dry-run` 通过。
 - **注意**：workflow 自身改动也会触发一次运行，此时版本未变、标签已存在，应看到「跳过」结论，这是幂等生效的正常表现。
+
+## 17. v1.6.0 状态切换反馈动画（2026-11-17）
+
+- **改动范围**：`src/ui/js/content.js` 的 `renderPosts` 与 `src/ui/style.css`；只影响「发布 / 转草稿」两个按钮，删除、重命名、编辑入口不变。
+- **状态机**：`rowFx: Map<文章名, { phase, action, message, timer }>`，四种阶段 `pending / success / noop / error`；以文章名为键而不是路径，因为发布会把 `_drafts/<name>.md` 变成 `_posts/<name>.md`，路径变化后仍能命中同一行的动画。
+- **时序**：点击 → 立即 `draw()` 进入加载态 → 请求返回 → 本地更新 `items` 并重绘（成功高亮 / 失败抖动 / 未变化标签）→ `clearFx` 定时清除状态并 `load()` 与服务端对齐。成功后不立即 `load()`，避免重绘打断 1.5s 高亮。
+- **防重**：`rowFx.pending` 守卫 + 按钮 `disabled` + 行内其他按钮禁用、编辑链接 `.is-locked`；实测连点只发一次请求（`test/status-fx.mjs` 计数断言）。
+- **样式**：新增 `.btn.is-loading` / `.btn.is-error` / `.is-locked` / `.tag.just-changed` / `tr.row-flash.ok` / `tr.row-flash.err` 与 `tagPop` / `cellOk` / `cellErr` / `nudge` 四个关键帧；颜色全部取自 `--ok-soft` / `--danger-soft` 等既有令牌，时长用 `--dur-feedback` 与 `--ease`，未引入新的主题变量。
+- **测试**：新增 `test/status-fx.mjs`（需要 `node test/ego-serve.mjs` 常驻），9 项断言覆盖加载态、成功、转回草稿、失败、连点、未变化与其他操作不受影响。
+- **已知边界**：`prefers-reduced-motion` 下关闭位移动画；状态列 `aria-live="polite"` 逐行播报，未额外引入全局播报区。
 

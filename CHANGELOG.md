@@ -4,6 +4,20 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.6.0 — 2026-11-17（MINOR）
+
+**新增：文章发布 / 转草稿的行内状态反馈动画**
+
+- 列表按文章名维护一次性反馈状态（pending / success / noop / error），只作用于「发布」与「转草稿」；删除、重命名等其他操作保持原样。
+- **进行中**：按钮切换为「发布中 / 转回中」，显示 12px 旋转指示器、禁用并标记 `aria-busy="true"`；状态列同步显示中性「发布中」标签；该行的编辑、重命名、删除一并锁住，其他文章不受影响。
+- **成功**：状态标签切换后播放 260ms 入场动画（`tagPop`），整行以成功色浅底高亮 1.5s，随后自动与服务端对齐。动画只改 `transform` / `opacity` / `background-color`，时长取自 `--dur-feedback` 与 `--ease`，主题切换时与按钮一起换档。
+- **失败**：按钮恢复可点击并加错误描边 + 220ms 轻微横向抖动（`nudge`），状态列显示「失败」并带完整错误 tooltip，保留原有 toast；3.6s 后自动清除，可立即重试。
+- **状态未变化**：后端返回 `already: true`，或本地比对状态与路径均未变时，只显示「未变化」中性标签与说明文案，不播放状态迁移与成功高亮。
+- **连续点击**：同一文章在 pending 期间的再次提交被 JS 守卫直接忽略并提示「正在提交，请稍候」；按钮禁用 + 行内其他操作锁定形成双重保护。
+- **无障碍与偏好**：状态列 `aria-live="polite"`；`prefers-reduced-motion: reduce` 下关闭入场与抖动动画，只保留减速的加载指示器。
+
+**验证**：新增 `test/status-fx.mjs` 浏览器回归 9/9（加载态、成功态、转回草稿、请求失败、连续点击只提交一次、状态未变化、其他操作不受影响）；`npm test` 72/72、`npm run test:ui` 20/20、`browser-qa.mjs` 49/49、`tsc --noEmit` 通过。
+
 ## v1.5.1 — 2026-11-17（PATCH）
 
 **修复：文章页点击「发布」时报 `GitHub API 404 … get-repository-content`**
