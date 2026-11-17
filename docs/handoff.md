@@ -333,3 +333,13 @@
 - **发布**：提交 `f2096d7` 并推送 `main`，附注标签 `v1.5.1`（`e5306be`）；随后部署生产 Worker，`Current Version ID` `80511ed7-1c86-4c38-a398-8dea33af4a1d`，线上静态资源 `appVersion = "1.5.1"`。按 2026-11-17 新约定，此后每次代码变更提交推送后立即部署，不再单独确认。
 - **线上即时恢复（无需部署）**：在「文章」页点击「刷新索引」即可清掉幽灵草稿行，该文章会以 `source/_posts/qexo-for-workers-recommendation.md` 的已发布状态重新出现。
 
+## 16. 版本发布流水线（2026-11-17）
+
+- **新增文件**：`.github/workflows/release.yml`（14 个步骤）、`.github/scripts/version-gate.mjs`（`detect` / `notes` 两个子命令）。
+- **触发**：`main` 分支上 `package.json`、`src/store.ts`、workflow 或脚本自身变更；另支持 `workflow_dispatch`（`force` 强制发布、`dry_run` 仅判定）。
+- **幂等**：版本号与基线（`github.event.before`，缺失时回退 `HEAD^`）比较，未变化即跳过；即使变化，`v<version>` 标签已存在也跳过（可选 `CHECK_RELEASE=1` 追加 Release 检查）。远端 tag 查询失败时直接失败退出，不在状态未知时发布。
+- **发布动作**：凭据检查 → `npm ci` → `tsc --noEmit` →（可选 `RUN_D1_MIGRATIONS=true` 执行远程迁移）→ `npm run deploy` → 可选线上版本校验 → 附注标签 → GitHub Release（notes 从 `CHANGELOG.md` 对应版本段提取，缺失时 `--generate-notes`）。
+- **配置项**：`VERSION_FILE` / `VERSION_KIND`（json|regex）/ `VERSION_JSON_PATH` / `VERSION_REGEX` / `TAG_PREFIX` / `CHANGELOG_FILE` 均可用仓库 Variables 覆盖，YAML 内已给出默认值。需要的 Secrets 为 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`；可选 Variables 为 `VERIFY_URL`、`RUN_D1_MIGRATIONS`。
+- **本地验证**：`detect` 四条路径（版本未变 + 标签已存在 → 跳过；版本变化 + 标签已存在 → 跳过；模拟未发布 → 发布；`force` → 强制发布）与 `notes 1.5.1` 提取（806 字符）均按预期；YAML 用 `yaml` 解析通过，`npm ci --dry-run` 通过。
+- **注意**：workflow 自身改动也会触发一次运行，此时版本未变、标签已存在，应看到「跳过」结论，这是幂等生效的正常表现。
+

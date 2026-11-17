@@ -1,0 +1,214 @@
+# 版本发布流水线
+#
+# 触发：main 分支上「版本文件」发生改动的 push；也可在 Actions 页手动触发。
+# 判定：当前版本 ≠ 基线版本，且 v<version> 标签不存在（可选再查 Release）→ 才执行发布。
+# 发布：部署 Cloudflare Worker → 打附注标签 → 创建 GitHub Release → 输出摘要。
+#
+# ── 需要替换 / 配置的参数 ──────────────────────────────────────────────
+# 1) 下方 paths 中的版本文件清单：换成你项目的实际文件。
+# 2) env.VERSION_FILE / VERSION_KIND / VERSION_JSON_PATH / VERSION_REGEX：
+#    版本号所在位置。JSON 用前三个，正则用 VERSION_KIND=regex + VERSION_REGEX。
+# 3) 仓库 Settings → Secrets and variables → Actions：
+#    Secrets:   CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID
+#    Variables: VERIFY_URL（可选，部署后校验线上版本的站点根地址，如 https://x.workers.dev）
+#               RUN_D1_MIGRATIONS=true（可选，发布前执行远程 D1 迁移）
+# 4) 若部署目标不是 Cloudflare，把「部署 Worker」步骤的 npm run deploy 换成你的发布命令。
+
+name: Version Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # ↓ 版本文件清单：任一改动都会进入版本门禁（可增删）
+      - "package.json"          # ← 版本来源 1
+      - "src/store.ts"          # ← 版本来源 2（QEXO_VERSION）
+      - ".github/workflows/release.yml"
+      - ".github/scripts/version-gate.mjs"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "版本未变化也执行发布（仍受「标签已存在则跳过」约束）"
+        type: boolean
+        default: false
+      dry_run:
+        description: "仅执行版本判定，不部署、不打标签"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# 同一分支串行执行，避免并发发布造成重复标签 / 重复部署
+concurrency:
+  group: version-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  # ── 版本来源（按需替换）─────────────────────────────────────────────
+  VERSION_FILE: ${{ vars.VERSION_FILE || 'package.json' }}
+  VERSION_KIND: ${{ vars.VERSION_KIND || 'json' }}          # json | regex
+  VERSION_JSON_PATH: ${{ vars.VERSION_JSON_PATH || 'version' }}
+  VERSION_REGEX: ${{ vars.VERSION_REGEX || '(?<=QEXO_VERSION\s*=\s*")[0-9]+\.[0-9]+\.[0-9]+' }}
+  TAG_PREFIX: ${{ vars.TAG_PREFIX || 'v' }}
+  CHANGELOG_FILE: ${{ vars.CHANGELOG_FILE || 'CHANGELOG.md' }}
+
+jobs:
+  release:
+    name: 检测版本并发布
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出代码（含完整历史与标签）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 安装 Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # ── 门禁：版本变化 + 尚未发布 ───────────────────────────────────
+      - name: 版本门禁（版本变化 / 是否已发布）
+        id: gate
+        env:
+          BASE_REF: ${{ github.event.before || '' }}
+          FORCE: ${{ inputs.force || 'false' }}
+          CHECK_RELEASE: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/version-gate.mjs detect
+
+      - name: 未通过门禁时说明原因
+        if: steps.gate.outputs.release != 'true'
+        run: |
+          echo "::notice::本次不发布：${{ steps.gate.outputs.reason }}"
+
+      # ── 发布前置检查 ──────────────────────────────────────────────
+      - name: 检查部署凭据
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -z "$CF_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CF_ACCOUNT" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::缺少部署凭据：$missing（Settings → Secrets and variables → Actions → Secrets）"
+            exit 1
+          fi
+          echo "::notice::部署凭据齐备（account=${CF_ACCOUNT}）"
+
+      - name: 安装依赖
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        run: npm ci
+
+      - name: 类型检查
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        run: npx tsc --noEmit
+
+      - name: 应用远程 D1 迁移（可选）
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true && vars.RUN_D1_MIGRATIONS == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run db:remote
+
+      # ── 部署 ──────────────────────────────────────────────────────
+      - name: 部署 Worker
+        id: deploy
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npm run deploy 2>&1 | tee deploy.log
+          version_id=$(sed 's/\x1b\[[0-9;]*m//g' deploy.log | grep -oE 'Current Version ID: [0-9a-f-]+' | tail -1 | awk '{print $4}' || true)
+          echo "version_id=${version_id}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Worker 已部署，版本 ID：${version_id:-未解析到}"
+
+      - name: 校验线上版本
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true && vars.VERIFY_URL
+        run: |
+          want="${{ steps.gate.outputs.version }}"
+          url="${{ vars.VERIFY_URL }}/js/mcp-prompt.js"
+          got=""
+          for i in 1 2 3 4 5 6; do
+            got=$(curl -fsS --max-time 10 "$url" 2>/dev/null | grep -oE 'appVersion = "[0-9.]+"' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+            if [ "$got" = "$want" ]; then
+              echo "::notice::线上版本已生效：$got"
+              exit 0
+            fi
+            echo "第 ${i} 次检测：期望 $want，实际 ${got:-空}，10s 后重试"
+            sleep 10
+          done
+          echo "::error::线上版本未在 60s 内变为 $want（最后读到：${got:-空}），请检查部署与缓存"
+          exit 1
+
+      # ── 打标签 + Release ──────────────────────────────────────────
+      - name: 创建并推送附注标签
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        env:
+          TAG: ${{ steps.gate.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "::notice::标签 $TAG 已存在，跳过创建"
+            exit 0
+          fi
+          git tag -a "$TAG" -m "release: $TAG"
+          git push origin "refs/tags/$TAG"
+          echo "::notice::已创建并推送标签 $TAG"
+
+      - name: 创建 GitHub Release
+        if: steps.gate.outputs.release == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.gate.outputs.tag }}
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG 已存在，跳过创建"
+            exit 0
+          fi
+          node .github/scripts/version-gate.mjs notes "$VERSION"
+          if [ -s release-notes.md ]; then
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          echo "::notice::已创建 Release $TAG"
+
+      # ── 汇总日志（成功 / 失败 / 跳过都输出）────────────────────────
+      - name: 写入运行摘要
+        if: always()
+        env:
+          OUTCOME: ${{ steps.gate.outputs.release == 'true' && '执行' || '跳过' }}
+        run: |
+          {
+            echo "## 版本发布：${OUTCOME}"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 版本来源 | \`${VERSION_FILE}\`（${VERSION_KIND}） |"
+            echo "| 当前版本 | \`${{ steps.gate.outputs.version || '—' }}\` |"
+            echo "| 基线版本 | \`${{ steps.gate.outputs.previous || '—' }}\` |"
+            echo "| 版本是否变化 | ${{ steps.gate.outputs.changed || '—' }} |"
+            echo "| 是否已发布过 | ${{ steps.gate.outputs.published || '—' }} |"
+            echo "| 判定原因 | ${{ steps.gate.outputs.reason || '见上方日志' }} |"
+            echo "| 标签 | \`${{ steps.gate.outputs.tag || '—' }}\` |"
+            echo "| 部署版本 ID | \`${{ steps.deploy.outputs.version_id || '—' }}\` |"
+            echo "| 触发方式 | ${GITHUB_EVENT_NAME} / ${GITHUB_SHA} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 失败时输出提示
+        if: failure()
+        run: |
+          echo "::error::版本发布失败，请查看上方标红步骤。已通过的步骤（部署 / 标签 / Release）不会回滚，重跑时由「标签已存在」门禁自动跳过已完成部分。"
+          echo "::error::常见原因：缺少 secrets、wrangler 配置错误、线上校验超时、tag 权限不足（需 permissions: contents: write）。"
