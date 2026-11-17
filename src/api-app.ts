@@ -491,14 +491,20 @@ export async function apiPublish(ctx: Ctx): Promise<Response> {
   const body = await readBody(ctx.req);
   const svc = await content(ctx);
   const result = await svc.publish(str(body, "file"));
-  return ok("发布成功", { path: result.path });
+  return ok(result.already ? "文章已是发布状态，索引已同步" : "发布成功", {
+    path: result.path,
+    already: !!result.already,
+  });
 }
 
 export async function apiUnpublish(ctx: Ctx): Promise<Response> {
   const body = await readBody(ctx.req);
   const svc = await content(ctx);
   const result = await svc.unpublish(str(body, "file"));
-  return ok("转为草稿成功", { path: result.path });
+  return ok(result.already ? "文章已是草稿状态，索引已同步" : "转为草稿成功", {
+    path: result.path,
+    already: !!result.already,
+  });
 }
 
 export async function apiNewPost(ctx: Ctx): Promise<Response> {

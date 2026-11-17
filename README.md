@@ -8,7 +8,7 @@
 [![API e2e](https://img.shields.io/badge/API%20e2e-58%2F58-brightgreen)](docs/test-report.md)
 [![Browser UI](https://img.shields.io/badge/UI-13%2F13-brightgreen)](docs/test-report.md)
 [![MCP](https://img.shields.io/badge/MCP-18%20tools-6f42c1)](docs/mcp.md)
-[![Version](https://img.shields.io/badge/version-1.5.0-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.5.1-2563eb.svg)](package.json)
 [![Deployed](https://img.shields.io/badge/deployed-Workers%20Free-success)](https://workers.cloudflare.com/)
 
 ---
@@ -35,7 +35,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.5.0**（`package.json` 与运行时 `/api/me` 一致） |
+| 项目版本 | **1.5.1**（`package.json` 与运行时 `/api/me` 一致） |
 | 上游版本 | Qexo 4.3.0（GPL-3.0） |
 | 运行时 | Workers + Static Assets（启动约 7–9 ms） |
 | 数据层 | D1（14 张表）＋ KV（可选缓存）＋ R2（可选图片/内容） |
@@ -362,4 +362,4 @@ test/              mock GitHub、e2e、UI 冒烟、Hexo 站点 fixture
 
 ---
 
-Made with TypeScript + Cloudflare Workers · **v1.5.0** · 2026-11
+Made with TypeScript + Cloudflare Workers · **v1.5.1** · 2026-11

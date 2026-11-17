@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.5.0", "runtime version mismatch");
+  assert.equal(me.data.version, "1.5.1", "runtime version mismatch");
   assert.equal(me.data.turnstile?.enabled, false, "Turnstile must stay disabled without operator secrets");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
@@ -301,6 +301,51 @@ await step("posts: 重命名", async () => {
   assert.ok(fs.existsSync(path.join("test/out/repo", "source/_posts/workers-renamed.md")));
   assert.ok(!fs.existsSync(path.join("test/out/repo", postPath)));
   postPath = "source/_posts/workers-renamed.md";
+});
+
+await step("posts: 重复发布幂等（索引残留不再 404）", async () => {
+  const fresh = await api.post("/api/new_post", { file: "idempotent-test" });
+  assert.equal(fresh.data.status, true, JSON.stringify(fresh.data));
+  const ghostDraft = fresh.data.path;
+  assert.ok(ghostDraft.includes("_drafts"));
+
+  const first = await api.post("/api/publish", { file: ghostDraft });
+  assert.equal(first.data.path, "source/_posts/idempotent-test.md");
+
+  // Second click on the same row: the draft is already gone. The API must
+  // resolve to the published file and repair the index instead of throwing.
+  const second = await api.post("/api/publish", { file: ghostDraft });
+  assert.equal(second.status, 200, JSON.stringify(second.data));
+  assert.equal(second.data.already, true);
+  assert.equal(second.data.path, "source/_posts/idempotent-test.md");
+
+  const list = await api.get("/api/posts");
+  assert.ok(list.data.data.some((p) => p.path === "source/_posts/idempotent-test.md"));
+  assert.ok(!list.data.data.some((p) => p.path.includes("_drafts/idempotent-test")));
+  return "第二次发布返回 already";
+});
+
+await step("posts: 草稿改名后按名字重新定位", async () => {
+  const fresh = await api.post("/api/new_post", { file: "moved-test" });
+  const oldPath = fresh.data.path;
+  const newPath = "source/_drafts/archive/moved-test.md";
+  fs.mkdirSync(path.dirname(path.join("test/out/repo", newPath)), { recursive: true });
+  fs.renameSync(path.join("test/out/repo", oldPath), path.join("test/out/repo", newPath));
+
+  const r = await api.post("/api/publish", { file: oldPath });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.path, "source/_posts/moved-test.md");
+  assert.ok(fs.existsSync(path.join("test/out/repo", "source/_posts/moved-test.md")));
+  assert.ok(!fs.existsSync(path.join("test/out/repo", newPath)));
+  return "旧路径失效后仍发布成功";
+});
+
+await step("posts: 草稿不存在时返回可读错误", async () => {
+  const r = await api.post("/api/publish", { file: "source/_drafts/ghost-entry.md" });
+  assert.equal(r.status, 404, JSON.stringify(r.data));
+  assert.ok(r.data.msg.includes("草稿不存在"), r.data.msg);
+  assert.ok(!r.data.msg.includes("GitHub API"), r.data.msg);
+  return r.data.msg;
 });
 
 await step("pages: 列表与读取", async () => {
@@ -944,7 +989,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.5.0",
+    appVersion: "1.5.1",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

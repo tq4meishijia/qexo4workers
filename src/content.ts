@@ -143,6 +143,16 @@ export interface PostListItem {
   title?: string;
 }
 
+interface IndexRow {
+  path: string;
+  name: string;
+  filename: string;
+  size: number;
+  status: number;
+  date: number;
+  title: string;
+}
+
 const TREE_TTL = 30;
 
 export class ContentService {
@@ -251,30 +261,48 @@ export class ContentService {
     return counts;
   }
 
-  private async indexed(kind: ContentKind): Promise<PostListItem[]> {
-    const { results } = await this.env.DB.prepare(
-      "SELECT path, name, filename, size, status, date, title FROM content_index WHERE kind = ? ORDER BY date DESC, name ASC",
-    )
-      .bind(kind)
-      .all<{ path: string; name: string; filename: string; size: number; status: number; date: number; title: string }>();
-    if (!results || results.length === 0) {
-      await this.refreshIndex();
-      const again = await this.env.DB.prepare(
+  private async indexed(kind: ContentKind, tree?: TreeEntry[] | null): Promise<PostListItem[]> {
+    const select = () =>
+      this.env.DB.prepare(
         "SELECT path, name, filename, size, status, date, title FROM content_index WHERE kind = ? ORDER BY date DESC, name ASC",
       )
         .bind(kind)
-        .all<{ path: string; name: string; filename: string; size: number; status: number; date: number; title: string }>();
-      return (again.results || []).map((r) => ({
-        name: r.name,
-        fullname: r.filename,
-        path: r.path,
-        size: r.size,
-        status: r.status === 1,
-        date: r.date,
-        title: r.title,
-      }));
+        .all<IndexRow>();
+
+    let { results } = await select();
+    if (!results || results.length === 0) {
+      await this.refreshIndex();
+      results = (await select()).results;
     }
-    return results.map((r) => ({
+    const rows = results || [];
+    if (rows.length === 0) return [];
+
+    // The D1 index can outlive the repository (a draft removed or published
+    // outside this Worker). Drop rows whose file is gone so the list never
+    // offers an entry that would 404 when published.
+    if (tree) {
+      const files = new Set(tree.filter((e) => e.type === "file").map((e) => e.path));
+      const stale = rows.filter((r) => !files.has(r.path));
+      if (stale.length) {
+        await this.env.DB.batch(
+          stale.map((r) =>
+            this.env.DB.prepare("DELETE FROM content_index WHERE kind = ? AND path = ?").bind(kind, r.path),
+          ),
+        );
+      }
+      return rows
+        .filter((r) => files.has(r.path))
+        .map((r) => ({
+          name: r.name,
+          fullname: r.filename,
+          path: r.path,
+          size: r.size,
+          status: r.status === 1,
+          date: r.date,
+          title: r.title,
+        }));
+    }
+    return rows.map((r) => ({
       name: r.name,
       fullname: r.filename,
       path: r.path,
@@ -286,7 +314,8 @@ export class ContentService {
   }
 
   async listPosts(search = ""): Promise<PostListItem[]> {
-    const [published, drafts] = await Promise.all([this.indexed("post"), this.indexed("draft")]);
+    const tree = await this.tree().catch(() => null);
+    const [published, drafts] = await Promise.all([this.indexed("post", tree), this.indexed("draft", tree)]);
     let items = [...published, ...drafts];
     if (search) {
       const q = search.toUpperCase();
@@ -296,7 +325,8 @@ export class ContentService {
   }
 
   async listPages(search = ""): Promise<PostListItem[]> {
-    let items = await this.indexed("page");
+    const tree = await this.tree().catch(() => null);
+    let items = await this.indexed("page", tree);
     if (search) {
       const q = search.toUpperCase();
       items = items.filter((i) => i.name.toUpperCase().includes(q));
@@ -431,32 +461,102 @@ export class ContentService {
     }
   }
 
-  async publish(path: string): Promise<{ path: string }> {
-    const raw = await this.provider.getFile(path);
+  /** Finds a post/draft by logical name in the live tree (ignores the cache). */
+  private async findByName(kind: "post" | "draft", name: string): Promise<string | null> {
+    try {
+      const items = this.sectionItems(await this.tree(true), kind);
+      // `name` keeps the relative sub-directory ("archive/moved-test"), so an
+      // exact match is tried first and a basename match second.
+      return (
+        items.find((i) => i.name === name)?.path ||
+        items.find((i) => basenameNoExt(i.path) === name)?.path ||
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /** Writes the row for the new location and drops the row for the old one. */
+  private async reindex(
+    target: string,
+    stalePath: string,
+    name: string,
+    kind: "post" | "draft",
+    raw: string,
+  ): Promise<void> {
+    const parsed = parseFrontMatter(raw);
+    await this.upsertIndex(kind, target, name, name, nowSec(), parsed.data);
+    await this.removeIndex(kind === "post" ? "draft" : "post", stalePath);
+  }
+
+  async publish(path: string): Promise<{ path: string; already?: boolean }> {
     const name = basenameNoExt(path);
     const target = await this.targetFor("post", name);
+    let source = path;
+    let raw: string;
+    try {
+      raw = await this.provider.getFile(source);
+    } catch {
+      // The index can outlive its file: the draft may already have been
+      // published, or deleted/renamed straight on GitHub. Resolve both cases
+      // instead of leaking a raw 404 to the UI.
+      const published = await this.provider.getFile(target).catch(() => null);
+      if (published !== null) {
+        await this.reindex(target, path, name, "post", published);
+        await this.invalidate(target);
+        return { path: target, already: true };
+      }
+      const relocated = await this.findByName("draft", name);
+      if (!relocated) {
+        throw new HttpError(
+          `草稿不存在：${path}。文章索引可能已过期，请回到文章列表点击「刷新索引」后重试。`,
+          404,
+        );
+      }
+      source = relocated;
+      raw = await this.provider.getFile(source);
+    }
+
     await this.provider.putFile(target, raw, `Publish Post ${name} by Qexo`);
-    await this.provider.deleteFile(path, `Delete Draft ${path} by Qexo`).catch(() => undefined);
-    await this.invalidate(path);
+    await this.provider.deleteFile(source, `Delete Draft ${source} by Qexo`).catch(() => undefined);
+    await this.invalidate(source);
     await this.invalidate(target);
-    const parsed = parseFrontMatter(raw);
-    await this.upsertIndex("post", target, name, name, nowSec(), parsed.data);
-    await this.removeIndex("draft", path);
+    await this.reindex(target, source, name, "post", raw);
     await this.maybeDeploy(`Publish Post ${name}`);
     return { path: target };
   }
 
-  async unpublish(path: string): Promise<{ path: string }> {
-    const raw = await this.provider.getFile(path);
+  async unpublish(path: string): Promise<{ path: string; already?: boolean }> {
     const name = basenameNoExt(path);
     const target = await this.targetFor("draft", name);
+    let source = path;
+    let raw: string;
+    try {
+      raw = await this.provider.getFile(source);
+    } catch {
+      const existing = await this.provider.getFile(target).catch(() => null);
+      if (existing !== null) {
+        await this.reindex(target, path, name, "draft", existing);
+        await this.invalidate(target);
+        return { path: target, already: true };
+      }
+      const relocated = await this.findByName("post", name);
+      if (!relocated) {
+        throw new HttpError(
+          `文章不存在：${path}。文章索引可能已过期，请回到文章列表点击「刷新索引」后重试。`,
+          404,
+        );
+      }
+      source = relocated;
+      raw = await this.provider.getFile(source);
+    }
+
     await this.provider.putFile(target, raw, `Unpublish Post ${name} by Qexo`);
-    await this.provider.deleteFile(path, `Delete Post ${path} by Qexo`).catch(() => undefined);
-    await this.invalidate(path);
+    await this.provider.deleteFile(source, `Delete Post ${source} by Qexo`).catch(() => undefined);
+    await this.invalidate(source);
     await this.invalidate(target);
-    const parsed = parseFrontMatter(raw);
-    await this.upsertIndex("draft", target, name, name, nowSec(), parsed.data);
-    await this.removeIndex("post", path);
+    await this.reindex(target, source, name, "draft", raw);
     await this.maybeDeploy(`Unpublish Post ${name}`);
     return { path: target };
   }

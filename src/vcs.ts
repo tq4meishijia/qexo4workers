@@ -174,23 +174,39 @@ export class GitHubProvider extends BaseProvider {
       .join("/");
   }
 
-  async getFile(path: string): Promise<string> {
-    const res = await this.req(
-      this.api(`/contents/${this.encodePath(this.toRepoPath(path))}?ref=${encodeURIComponent(this.branch)}`),
-      { headers: this.headers },
-      "GitHub",
+  /** Reads one file. A 404 is reported as "file not found", not as a raw API dump. */
+  private async readContent(
+    path: string,
+    headers: Record<string, string>,
+    accept?: string,
+  ): Promise<Response> {
+    const repoPath = this.toRepoPath(path);
+    const res = await fetch(
+      this.api(`/contents/${this.encodePath(repoPath)}?ref=${encodeURIComponent(this.branch)}`),
+      { headers: accept ? { ...headers, Accept: accept } : headers },
     );
+    if (res.status === 404) {
+      throw new HttpError(
+        `文件不存在：${repoPath}（仓库 ${this.repo || "未配置"}，分支 ${this.branch}）`,
+        404,
+      );
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new HttpError(`GitHub API ${res.status}: ${body.slice(0, 300)}`, 502);
+    }
+    return res;
+  }
+
+  async getFile(path: string): Promise<string> {
+    const res = await this.readContent(path, this.headers);
     const data: any = await res.json();
     if (Array.isArray(data)) throw new HttpError(`${path} 是目录`, 400);
     return new TextDecoder().decode(b64decode(data.content || ""));
   }
 
   async getBytes(path: string): Promise<Uint8Array> {
-    const res = await this.req(
-      this.api(`/contents/${this.encodePath(this.toRepoPath(path))}?ref=${encodeURIComponent(this.branch)}`),
-      { headers: { ...this.headers, Accept: "application/vnd.github.raw" } },
-      "GitHub",
-    );
+    const res = await this.readContent(path, this.headers, "application/vnd.github.raw");
     return new Uint8Array(await res.arrayBuffer());
   }
 

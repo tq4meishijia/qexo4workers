@@ -4,6 +4,18 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.5.1 — 2026-11-17（PATCH）
+
+**修复：文章页点击「发布」时报 `GitHub API 404 … get-repository-content`**
+
+- 根因：文章索引（D1 `content_index`）可能比仓库活得更久。草稿在 20:52 已成功发布并删除 `source/_drafts/<name>.md`，但该行的 draft 记录未被清掉；再次点击「发布」时 `publish()` 先 `GET /contents/<draft>`，GitHub 返回 404，代码把原始响应体直接透传成错误消息。
+- `publish()` / `unpublish()` 改为幂等且可自愈：源文件 404 时先确认目标位置是否已存在（已存在 → 修复索引并返回 `already: true`，提示「文章已是发布状态，索引已同步」）；否则按名字在实时 tree 中重新定位被移动的草稿/文章，找到即继续发布。
+- 真找不到时返回可读错误（404 + 「草稿不存在：<path>。文章索引可能已过期，请回到文章列表点击「刷新索引」后重试。」），不再暴露 GitHub 原始 JSON。
+- 文章 / 页面列表读取时与仓库 tree 做一次一致性校验：索引中指向已删除文件的残留行会被自动清除并从列表隐藏，避免出现「点发布必 404」的幽灵条目；tree 取不到时跳过校验，不影响列表可用性。
+- `GitHubProvider.getFile()` / `getBytes()` 的 404 统一转为「文件不存在：<repo 内路径>（仓库 <owner/repo>，分支 <branch>）」，其余状态码仍按 502 带截断 body。
+
+**验证**：`npm test` 72/72（新增「重复发布幂等」「草稿改名后按名字重定位」「草稿缺失返回可读错误」三项）、`tsc --noEmit` 与 `deploy:dry` 通过。
+
 ## v1.5.0 — 2026-11-15（MINOR）
 
 **新增：Turnstile 连接配置可直接在「设置 → 安全」网页端填写**
