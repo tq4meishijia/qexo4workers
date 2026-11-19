@@ -1,6 +1,6 @@
 /* Content views: posts, pages, config files, editor, image library. */
 
-import { api, confirmDialog, copyText, debounce, esc, filterRows, fmtDate, icon, navigate, openModal, renderMarkdown, route, setTitle, state, t, toast } from "./core.js";
+import { api, btnBusy, confirmDialog, copyText, debounce, esc, filterRows, fmtDate, icon, listStateHtml, navigate, openModal, renderMarkdown, route, runBusy, setTitle, state, t, toast } from "./core.js";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -31,7 +31,7 @@ async function renderPosts({ view, query }) {
         <button class="tab ${tab === "published" ? "active" : ""}" data-tab="published">已发布</button>
         <button class="tab ${tab === "draft" ? "active" : ""}" data-tab="draft">草稿</button>
       </div>
-      <div id="list"></div>
+      <div id="list">${listStateHtml.loading("正在读取文章列表…")}</div>
     </div>`;
 
   let items = [];
@@ -122,20 +122,28 @@ async function renderPosts({ view, query }) {
       else filterRows("#list tbody tr", e.target.value);
     };
     document.querySelectorAll("[data-act]").forEach((btn) => {
-      btn.onclick = () => act(btn.dataset.act, btn.dataset.path, btn.dataset.name);
+      btn.onclick = () => act(btn.dataset.act, btn.dataset.path, btn.dataset.name, btn);
     });
   };
 
-  const refresh = async () => {
-    toast("正在读取仓库目录…");
-    const res = await api("/api/posts/refresh", { method: "POST", body: {} });
-    toast(`索引已刷新：${res.counts.posts} 篇已发布 / ${res.counts.drafts} 篇草稿`, "ok");
-    await load();
-  };
+  const refresh = () =>
+    runBusy(document.getElementById("refresh"), async () => {
+      toast("正在读取仓库目录…");
+      const res = await api("/api/posts/refresh", { method: "POST", body: {} });
+      toast(`索引已刷新：${res.counts.posts} 篇已发布 / ${res.counts.drafts} 篇草稿`, "ok");
+      await load();
+    }, "刷新中…").catch((e) => toast(e.message, "err"));
 
   const load = async () => {
-    const res = await api("/api/posts");
-    items = res.data || [];
+    try {
+      const res = await api("/api/posts");
+      items = res.data || [];
+    } catch (e) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
 
@@ -201,7 +209,7 @@ async function renderPosts({ view, query }) {
     }
   };
 
-  const act = async (kind, path, name) => {
+  const act = async (kind, path, name, btn) => {
     if (kind === "publish" || kind === "unpublish") {
       await changeStatus(kind, path, name);
       return;
@@ -209,7 +217,7 @@ async function renderPosts({ view, query }) {
     try {
       if (kind === "delete") {
         if (!(await confirmDialog(`确定删除 ${path} 吗？该操作会直接提交到仓库，不可回退。`))) return;
-        await api("/api/delete", { method: "POST", body: { file: path } });
+        await runBusy(btn, () => api("/api/delete", { method: "POST", body: { file: path } }), "删除中…");
         toast("删除成功", "ok");
       } else if (kind === "rename") {
         openModal({
@@ -259,7 +267,7 @@ async function renderPosts({ view, query }) {
 
 async function renderPages({ view, query }) {
   setTitle("页面", [{ text: "内容" }, { text: "页面" }]);
-  view.innerHTML = `<div class="card" id="list"><div class="empty">加载中…</div></div>`;
+  view.innerHTML = `<div class="card" id="list">${listStateHtml.loading("正在读取页面列表…")}</div>`;
   let items = [];
 
   const draw = () => {
@@ -290,11 +298,12 @@ async function renderPages({ view, query }) {
       if (location.hash.startsWith("#/images")) filterRows(".image-card", e.target.value);
       else filterRows("#list tbody tr", e.target.value);
     };
-    document.getElementById("refresh").onclick = async () => {
-      const res = await api("/api/posts/refresh", { method: "POST", body: {} });
-      toast(`索引已刷新：${res.counts.pages} 个页面`, "ok");
-      await load();
-    };
+    document.getElementById("refresh").onclick = () =>
+      runBusy(document.getElementById("refresh"), async () => {
+        const res = await api("/api/posts/refresh", { method: "POST", body: {} });
+        toast(`索引已刷新：${res.counts.pages} 个页面`, "ok");
+        await load();
+      }, "刷新中…").catch((e) => toast(e.message, "err"));
     document.getElementById("new").onclick = () =>
       openModal({
         title: "新建页面",
@@ -324,7 +333,7 @@ async function renderPages({ view, query }) {
         const path = btn.dataset.del;
         if (!(await confirmDialog(`确定删除页面 ${path} 吗？`))) return;
         try {
-          await api("/api/delete", { method: "POST", body: { file: path } });
+          await runBusy(btn, () => api("/api/delete", { method: "POST", body: { file: path } }), "删除中…");
           toast("删除成功", "ok");
           await load();
         } catch (e) {
@@ -335,8 +344,15 @@ async function renderPages({ view, query }) {
   };
 
   const load = async () => {
-    const res = await api("/api/pages");
-    items = res.data || [];
+    try {
+      const res = await api("/api/pages");
+      items = res.data || [];
+    } catch (e) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
   await load();
@@ -484,9 +500,10 @@ async function renderEditor({ view, query }) {
       if (!file) return;
       const form = new FormData();
       form.append("file", file);
+      const upBtn = document.getElementById("upload-inline");
       try {
-        toast("上传中…");
-        const res = await api("/api/upload", { method: "POST", body: form });
+        toast("正在上传…");
+        const res = await runBusy(upBtn, () => api("/api/upload", { method: "POST", body: form }), "上传中…");
         insertAtCursor(`\n![${file.name}](${res.url})\n`);
         toast("已插入图片", "ok");
       } catch (e) {
@@ -525,7 +542,7 @@ async function renderEditor({ view, query }) {
   const save = async (status) => {
     const btn = document.getElementById("save");
     const hint = document.getElementById("save-hint");
-    btn.disabled = true;
+    btnBusy(btn, true, "保存中…");
     try {
       let fmData;
       try {
@@ -562,7 +579,7 @@ async function renderEditor({ view, query }) {
     } catch (e) {
       toast(e.message, "err");
     } finally {
-      btn.disabled = false;
+      btnBusy(btn, false);
     }
   };
 
@@ -572,8 +589,9 @@ async function renderEditor({ view, query }) {
       await save(true);
     } else {
       if (!(await confirmDialog("转为草稿会从正式目录移动到草稿目录，确定继续？"))) return;
+      const pubBtn = document.getElementById("publish");
       try {
-        await api("/api/unpublish", { method: "POST", body: { file: path } });
+        await runBusy(pubBtn, () => api("/api/unpublish", { method: "POST", body: { file: path } }), "转回中…");
         toast("已转为草稿", "ok");
         navigate("/posts?tab=draft");
       } catch (e) {
@@ -589,7 +607,7 @@ async function renderEditor({ view, query }) {
 
 async function renderConfigs({ view }) {
   setTitle("配置", [{ text: "内容" }, { text: "配置" }]);
-  view.innerHTML = `<div class="card" id="list"><div class="empty">加载中…</div></div>`;
+  view.innerHTML = `<div class="card" id="list">${listStateHtml.loading("正在读取配置文件…")}</div>`;
   let items = [];
 
   const draw = () => {
@@ -616,15 +634,23 @@ async function renderConfigs({ view }) {
       if (location.hash.startsWith("#/images")) filterRows(".image-card", e.target.value);
       else filterRows("#list tbody tr", e.target.value);
     };
-    document.getElementById("refresh").onclick = async () => {
-      const res = await api("/api/posts/refresh", { method: "POST", body: {} });
-      toast(`索引已刷新：${res.counts.configs} 个配置文件`, "ok");
-      await load();
-    };
+    document.getElementById("refresh").onclick = () =>
+      runBusy(document.getElementById("refresh"), async () => {
+        const res = await api("/api/posts/refresh", { method: "POST", body: {} });
+        toast(`索引已刷新：${res.counts.configs} 个配置文件`, "ok");
+        await load();
+      }, "刷新中…").catch((e) => toast(e.message, "err"));
   };
   const load = async () => {
-    const res = await api("/api/configs");
-    items = res.data || [];
+    try {
+      const res = await api("/api/configs");
+      items = res.data || [];
+    } catch (e) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
   await load();
@@ -652,19 +678,13 @@ async function renderConfigEditor({ view, query }) {
       <textarea id="cfg" class="code" style="min-height:62vh;padding:14px;line-height:1.6;font-size:13px">${esc(data.content || "")}</textarea>
       <p class="hint mt" id="hint"></p>
     </div>`;
-  document.getElementById("save").onclick = async () => {
-    const btn = document.getElementById("save");
-    btn.disabled = true;
-    try {
+  document.getElementById("save").onclick = () =>
+    runBusy(document.getElementById("save"), async () => {
+      const hint = document.getElementById("hint");
       await api("/api/save_config", { method: "POST", body: { file: path, content: document.getElementById("cfg").value } });
-      document.getElementById("hint").textContent = `已保存 · ${new Date().toLocaleTimeString()}`;
+      if (hint) hint.textContent = `已保存 · ${new Date().toLocaleTimeString()}`;
       toast("保存成功", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    } finally {
-      btn.disabled = false;
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -694,7 +714,7 @@ async function renderImages({ view }) {
         <button class="btn primary sm" id="pick">${icon("upload")} 上传图片</button>
       </div>
       <div class="dropzone" id="drop">拖拽图片到此处上传，或点击选择文件</div>
-      <div class="image-grid mt" id="grid"></div>
+      <div class="image-grid mt" id="grid">${listStateHtml.loading("正在读取图库…")}</div>
     </div>`;
   let items = [];
 
@@ -712,7 +732,7 @@ async function renderImages({ view }) {
           <div class="ops"><button class="btn sm" data-copy="${esc(i.url)}">复制链接</button>
             <button class="btn sm danger" data-del="${esc(i.time)}">删除</button></div>
         </div>`).join("")
-      : `<div class="empty" style="grid-column:1/-1"><strong>暂无图片</strong>上传后会记录到 D1，并可同步删除远端对象</div>`;
+      : `<div class="empty"><strong>暂无图片</strong>上传后会记录到 D1，并可同步删除远端对象</div>`;
     document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
     document.querySelectorAll("[data-del]").forEach((b) => {
       b.onclick = async () => {
@@ -727,7 +747,7 @@ async function renderImages({ view }) {
           });
         });
         try {
-          await api("/api/delete_img", { method: "POST", body: { image: b.dataset.del, sync: sync ? "true" : "false" } });
+          await runBusy(b, () => api("/api/delete_img", { method: "POST", body: { image: b.dataset.del, sync: sync ? "true" : "false" } }), "删除中…");
           toast("删除成功", "ok");
           await load();
         } catch (e) {
@@ -738,23 +758,43 @@ async function renderImages({ view }) {
   };
 
   const upload = async (files) => {
-    for (const file of files) {
-      const form = new FormData();
-      form.append("file", file);
-      try {
-        toast(`上传 ${file.name}…`);
-        await api("/api/upload", { method: "POST", body: form });
-        toast(`${file.name} 上传成功`, "ok");
-      } catch (e) {
-        toast(`${file.name}: ${e.message}`, "err");
+    const pick = document.getElementById("pick");
+    const drop = document.getElementById("drop");
+    const prevDropText = drop.textContent;
+    btnBusy(pick, true, "上传中…");
+    drop.style.pointerEvents = "none"; // 上传期间暂停拖拽与点击，避免并发批次
+    let done = 0;
+    try {
+      for (const file of files) {
+        done++;
+        const form = new FormData();
+        form.append("file", file);
+        drop.textContent = `正在上传 ${done}/${files.length}：${file.name}`;
+        try {
+          await api("/api/upload", { method: "POST", body: form });
+          toast(`${file.name} 上传成功`, "ok");
+        } catch (e) {
+          toast(`${file.name}: ${e.message}`, "err");
+        }
       }
+    } finally {
+      drop.textContent = prevDropText;
+      drop.style.pointerEvents = "";
+      btnBusy(pick, false);
     }
     await load();
   };
 
   const load = async () => {
-    const res = await api("/api/images");
-    items = res.data || [];
+    try {
+      const res = await api("/api/images");
+      items = res.data || [];
+    } catch (e) {
+      const grid = document.getElementById("grid");
+      if (grid) grid.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
 

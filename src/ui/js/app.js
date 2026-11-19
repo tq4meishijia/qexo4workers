@@ -1,6 +1,6 @@
 /* Shell, authentication, initialization wizard and dashboard. */
 
-import { api, esc, fmtDate, icon, openModal, refreshMe, renderRoute, route, setTitle, startRouter, state, t, toast } from "./core.js";
+import { api, esc, fmtDate, icon, openModal, refreshMe, renderRoute, route, runBusy, setTitle, startRouter, state, t, toast } from "./core.js";
 import { bindProviderFields, collectProviderParams, providerFieldsHtml } from "./provider-form.js";
 import "./content.js";
 import "./social.js";
@@ -95,11 +95,12 @@ async function renderInit(view) {
           <select id="lang">${meta.languages.map((l) => `<option value="${l.code}">${esc(l.name)}</option>`).join("")}</select>
         </label>
         <button class="btn primary" id="next">下一步</button>`;
-      document.getElementById("next").onclick = async () => {
-        await api("/api/init_step", { method: "POST", body: { step: "1", language: document.getElementById("lang").value } });
-        step = 2;
-        draw();
-      };
+      document.getElementById("next").onclick = () =>
+        runBusy(document.getElementById("next"), async () => {
+          await api("/api/init_step", { method: "POST", body: { step: "1", language: document.getElementById("lang").value } });
+          step = 2;
+          draw();
+        }, "提交中…").catch((e) => toast(e.message, "err"));
     }
 
     if (step === 2) {
@@ -109,16 +110,15 @@ async function renderInit(view) {
         <label class="field"><span>确认密码</span><input id="p2" type="password" autocomplete="new-password" /></label>
         <label class="field"><span>API 密钥（可选，用于 /pub 接口）</span><input id="k" placeholder="留空自动生成" /></label>
         <button class="btn primary" id="next">创建管理员</button>`;
-      document.getElementById("next").onclick = async () => {
-        try {
+      document.getElementById("next").onclick = () =>
+        runBusy(document.getElementById("next"), async () => {
           await api("/api/init_step", {
             method: "POST",
             body: { step: "2", username: document.getElementById("u").value, password: document.getElementById("p").value, repassword: document.getElementById("p2").value, apikey: document.getElementById("k").value },
           });
           step = 3;
           draw();
-        } catch (e) { toast(e.message, "err"); }
-      };
+        }, "创建中…").catch((e) => toast(e.message, "err"));
     }
 
     if (step === 3) {
@@ -129,21 +129,21 @@ async function renderInit(view) {
         </label>
         <button class="btn primary" id="next">保存并继续</button>`;
       bindProviderPanel(meta.providers);
-      document.getElementById("next").onclick = async () => {
-        try {
-          const cfg = collectProvider();
-          if (cfg.provider === "github" && !cfg.params.repo) {
-            toast("GitHub 仓库为空：请从下拉中选择或手动填写（未写入任何配置）", "err");
-            return;
-          }
-          if (cfg.provider === "github" && !cfg.params.branch) {
-            toast("项目分支为空：请先选择仓库，再从下拉中选择分支（未写入任何配置）", "err");
-            return;
-          }
+      document.getElementById("next").onclick = () => {
+        const cfg = collectProvider();
+        if (cfg.provider === "github" && !cfg.params.repo) {
+          toast("GitHub 仓库为空：请从下拉中选择或手动填写（未写入任何配置）", "err");
+          return;
+        }
+        if (cfg.provider === "github" && !cfg.params.branch) {
+          toast("项目分支为空：请先选择仓库，再从下拉中选择分支（未写入任何配置）", "err");
+          return;
+        }
+        runBusy(document.getElementById("next"), async () => {
           await api("/api/init_step", { method: "POST", body: { step: "3", provider: JSON.stringify(cfg), force: document.getElementById("force").checked ? "true" : "false" } });
           step = 4;
           draw();
-        } catch (e) { toast(e.message, "err"); }
+        }, "保存中…").catch((e) => toast(e.message, "err"));
       };
     }
 
@@ -176,8 +176,8 @@ async function renderInit(view) {
       };
       kind.onchange = renderDeploy;
       renderDeploy();
-      document.getElementById("next").onclick = async () => {
-        try {
+      document.getElementById("next").onclick = () =>
+        runBusy(document.getElementById("next"), async () => {
           await api("/api/init_step", {
             method: "POST",
             body: {
@@ -193,8 +193,7 @@ async function renderInit(view) {
           toast("初始化完成", "ok");
           location.hash = "#/dashboard";
           location.reload();
-        } catch (e) { toast(e.message, "err"); }
-      };
+        }, "完成中…").catch((e) => toast(e.message, "err"));
     }
   };
   draw();

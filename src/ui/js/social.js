@@ -1,6 +1,6 @@
 /* Social views: friend links and talks. */
 
-import { api, confirmDialog, debounce, esc, filterRows, fmtDate, icon, openModal, route, setTitle, toast } from "./core.js";
+import { api, confirmDialog, debounce, esc, filterRows, fmtDate, icon, listStateHtml, openModal, route, runBusy, setTitle, toast } from "./core.js";
 
 /* ------------------------------------------------------------------ */
 /* friends                                                            */
@@ -29,7 +29,7 @@ function readFriendForm() {
 
 async function renderFriends({ view }) {
   setTitle("友链", [{ text: "互动" }, { text: "友链" }]);
-  view.innerHTML = `<div class="card" id="list"><div class="empty">加载中…</div></div>`;
+  view.innerHTML = `<div class="card" id="list">${listStateHtml.loading("正在读取友链…")}</div>`;
   let items = [];
 
   const draw = () => {
@@ -81,7 +81,7 @@ async function renderFriends({ view }) {
     document.getElementById("clean").onclick = async () => {
       if (!(await confirmDialog("确定清理所有隐藏的友链吗？该操作不可回退。"))) return;
       try {
-        const res = await api("/api/friends/clean", { method: "POST", body: {} });
+        const res = await runBusy(document.getElementById("clean"), () => api("/api/friends/clean", { method: "POST", body: {} }), "清理中…");
         toast(res.msg, "ok");
         await load();
       } catch (e) {
@@ -118,7 +118,7 @@ async function renderFriends({ view }) {
       btn.onclick = async () => {
         if (!(await confirmDialog("确定删除该友链吗？"))) return;
         try {
-          await api("/api/friends", { method: "DELETE", body: { time: btn.dataset.del } });
+          await runBusy(btn, () => api("/api/friends", { method: "DELETE", body: { time: btn.dataset.del } }), "删除中…");
           toast("删除成功！", "ok");
           await load();
         } catch (e) {
@@ -129,8 +129,15 @@ async function renderFriends({ view }) {
   };
 
   const load = async () => {
-    const res = await api("/api/friends");
-    items = res.data || [];
+    try {
+      const res = await api("/api/friends");
+      items = res.data || [];
+    } catch (e) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
   await load();
@@ -149,7 +156,7 @@ async function renderTalks({ view }) {
         <div class="spacer"></div>
         <button class="btn primary sm" id="add">${icon("plus")} 发布说说</button>
       </div>
-      <div id="list"></div>
+      <div id="list">${listStateHtml.loading("正在读取说说…")}</div>
     </div>`;
   let items = [];
 
@@ -213,7 +220,7 @@ async function renderTalks({ view }) {
       btn.onclick = async () => {
         if (!(await confirmDialog("确定删除这条说说吗？"))) return;
         try {
-          await api("/api/talks", { method: "DELETE", body: { id: btn.dataset.del } });
+          await runBusy(btn, () => api("/api/talks", { method: "DELETE", body: { id: btn.dataset.del } }), "删除中…");
           toast("删除成功！", "ok");
           await load();
         } catch (e) {
@@ -224,8 +231,15 @@ async function renderTalks({ view }) {
   };
 
   const load = async () => {
-    const res = await api("/api/talks");
-    items = res.data || [];
+    try {
+      const res = await api("/api/talks");
+      items = res.data || [];
+    } catch (e) {
+      const list = document.getElementById("list");
+      if (list) list.innerHTML = listStateHtml.error(e.message);
+      toast(e.message, "err");
+      return;
+    }
     draw();
   };
 

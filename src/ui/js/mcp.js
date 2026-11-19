@@ -1,6 +1,6 @@
 /* MCP integration: tokens, connection snippets, agent onboarding prompt, tool catalog. */
 
-import { api, confirmDialog, esc, fmtDate, icon, openModal, route, setTitle, state, toast } from "./core.js";
+import { api, confirmDialog, esc, fmtDate, icon, openModal, route, runBusy, setTitle, state, toast } from "./core.js";
 import { buildAgentPrompt, PROMPT_SECTIONS, PROMPT_SPEC } from "./mcp-prompt.js";
 
 const TOKEN_PLACEHOLDER = "<YOUR_TOKEN>";
@@ -146,6 +146,7 @@ async function renderMcp({ view }) {
 
   const drawTokens = (tokens) => {
     const el = document.getElementById("tokens");
+    if (!el) return; // 请求期间页面已切换时无需重绘
     if (!tokens.length) {
       el.innerHTML = `<div class="empty"><strong>还没有令牌</strong>创建后把配置贴到 AI 客户端即可</div>`;
       return;
@@ -168,7 +169,7 @@ async function renderMcp({ view }) {
       btn.onclick = async () => {
         if (!(await confirmDialog("吊销后使用该令牌的 agent 会立即失去访问权限，确定继续？"))) return;
         try {
-          await api("/api/mcp/tokens", { method: "DELETE", body: { id: btn.dataset.revoke } });
+          await runBusy(btn, () => api("/api/mcp/tokens", { method: "DELETE", body: { id: btn.dataset.revoke } }), "吊销中…");
           toast("令牌已吊销", "ok");
           const next = await api("/api/mcp");
           drawTokens(next.tokens);
@@ -231,7 +232,7 @@ async function renderMcp({ view }) {
                 scopes,
                 tools: data.tools,
                 protocols: data.protocols,
-                appVersion: state.settings?.version || "1.6.1",
+                appVersion: state.settings?.version || "1.7.0",
               });
               showToken(res.token, scopes, prompt);
               const next = await api("/api/mcp");
@@ -292,15 +293,12 @@ async function renderMcp({ view }) {
     });
   }
 
-  document.getElementById("toggle").onclick = async () => {
-    try {
+  document.getElementById("toggle").onclick = () =>
+    runBusy(document.getElementById("toggle"), async () => {
       const res = await api("/api/mcp/toggle", { method: "POST", body: { enabled: !data.enabled } });
       toast(res.msg, "ok");
       await renderMcp({ view: document.getElementById("view") });
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "正在切换…").catch((e) => toast(e.message, "err"));
 
   document.getElementById("curl").onclick = () =>
     copyAny(

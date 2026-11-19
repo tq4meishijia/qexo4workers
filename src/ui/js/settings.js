@@ -1,7 +1,7 @@
 /* Settings views: provider, general, image host, security, analytics,
    deploy, advanced, account. */
 
-import { api, confirmDialog, esc, icon, openModal, route, setTitle, state, toast } from "./core.js";
+import { api, confirmDialog, esc, icon, openModal, route, runBusy, setTitle, state, toast } from "./core.js";
 import { bindProviderFields, collectProviderParams, providerFieldsHtml } from "./provider-form.js";
 
 let CACHE = null;
@@ -111,7 +111,7 @@ function bindProviderTab(s) {
     document.getElementById("prov-fields").innerHTML = providerFieldsHtml(meta, params);
     dispose = bindProviderFields(meta);
   };
-  document.getElementById("save-provider").onclick = async () => {
+  document.getElementById("save-provider").onclick = () => {
     const params = { config: document.getElementById("prov-platform").value, ...collectProviderParams() };
     const empty = providerEmptyError(type.value, params);
     if (empty) {
@@ -120,20 +120,23 @@ function bindProviderTab(s) {
       return;
     }
     const cfg = { provider: type.value, params };
-    try {
+    runBusy(document.getElementById("save-provider"), async () => {
       const res = await api("/api/settings/provider", {
         method: "POST",
         body: { provider: JSON.stringify(cfg), force: document.getElementById("force").checked ? "true" : "false" },
       });
-      document.getElementById("prov-msg").textContent = res.msg || "";
+      // 请求期间用户可能已切走标签页：节点被重渲染替换时跳过回写，只保留 toast。
+      const msg = document.getElementById("prov-msg");
+      if (msg) msg.textContent = res.msg || "";
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
+    }, "保存中…").catch((e) => {
       toast(e.message, "err");
-      document.getElementById("prov-msg").textContent = e.message;
-    }
+      const msg = document.getElementById("prov-msg");
+      if (msg) msg.textContent = e.message;
+    });
   };
-  document.getElementById("verify-provider").onclick = async () => {
+  document.getElementById("verify-provider").onclick = () => {
     const empty = providerEmptyError(type.value, collectProviderParams());
     if (empty) {
       const msg = "表单中仓库/分支为空，未执行校验；请先明确选择后再点「校验当前配置」";
@@ -141,13 +144,11 @@ function bindProviderTab(s) {
       document.getElementById("prov-msg").textContent = msg;
       return;
     }
-    try {
+    runBusy(document.getElementById("verify-provider"), async () => {
       const res = await api("/api/settings/verify_provider", { method: "POST", body: {} });
       document.getElementById("prov-msg").textContent = JSON.stringify(res, null, 2);
       toast(res.status === 1 ? "校验通过" : "校验未通过", res.status === 1 ? "ok" : "warn");
-    } catch (e) {
-      toast(e.message, "err");
-    }
+    }, "校验中…").catch((e) => toast(e.message, "err"));
   };
 }
 
@@ -184,8 +185,8 @@ function basicTab(s) {
 }
 
 function bindBasicTab() {
-  document.getElementById("save-basic").onclick = async () => {
-    try {
+  document.getElementById("save-basic").onclick = () =>
+    runBusy(document.getElementById("save-basic"), async () => {
       await api("/api/settings", {
         method: "POST",
         body: {
@@ -200,10 +201,7 @@ function bindBasicTab() {
       });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -324,18 +322,15 @@ function bindImageTab(s) {
     bindImagePreview();
   };
   bindImagePreview();
-  document.getElementById("save-image").onclick = async () => {
-    try {
+  document.getElementById("save-image").onclick = () =>
+    runBusy(document.getElementById("save-image"), async () => {
       await api("/api/settings/image_host", {
         method: "POST",
         body: { image_host: JSON.stringify({ type: type.value, params: collectParams("i") }) },
       });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -489,8 +484,8 @@ function securityTab(s) {
 }
 
 function bindSecurityTab() {
-  document.getElementById("save-security").onclick = async () => {
-    try {
+  document.getElementById("save-security").onclick = () =>
+    runBusy(document.getElementById("save-security"), async () => {
       await api("/api/settings", {
         method: "POST",
         body: {
@@ -507,10 +502,7 @@ function bindSecurityTab() {
       });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 
   const tsSwitch = document.getElementById("ts-enabled");
   if (tsSwitch) {
@@ -606,8 +598,8 @@ function statisticTab(s) {
 }
 
 function bindStatisticTab() {
-  document.getElementById("save-stat").onclick = async () => {
-    try {
+  document.getElementById("save-stat").onclick = () =>
+    runBusy(document.getElementById("save-stat"), async () => {
       await api("/api/settings", {
         method: "POST",
         body: {
@@ -618,16 +610,16 @@ function bindStatisticTab() {
       });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
   api("/api/statistic/summary").then((res) => {
     const el = document.getElementById("stat-summary");
     if (!el) return;
     el.innerHTML = `<div class="grid cols-3"><div><div class="value" style="font-size:20px">${res.site_pv}</div><div class="label">站点 PV</div></div>
       <div><div class="value" style="font-size:20px">${res.site_uv}</div><div class="label">站点 UV</div></div>
       <div><div class="value" style="font-size:20px">${res.top?.length || 0}</div><div class="label">已记录页面</div></div></div>`;
+  }).catch((e) => {
+    const el = document.getElementById("stat-summary");
+    if (el) el.textContent = `加载失败：${e.message}`;
   });
 }
 
@@ -666,8 +658,8 @@ function deployTab(s) {
 }
 
 function bindDeployTab() {
-  document.getElementById("save-deploy").onclick = async () => {
-    try {
+  document.getElementById("save-deploy").onclick = () =>
+    runBusy(document.getElementById("save-deploy"), async () => {
       await api("/api/settings", {
         method: "POST",
         body: {
@@ -682,18 +674,12 @@ function bindDeployTab() {
       });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
-  document.getElementById("test-deploy").onclick = async () => {
-    try {
+    }, "保存中…").catch((e) => toast(e.message, "err"));
+  document.getElementById("test-deploy").onclick = () =>
+    runBusy(document.getElementById("test-deploy"), async () => {
       const res = await api("/api/deploy/test", { method: "POST", body: {} });
       toast(res.msg || "已触发", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "触发中…").catch((e) => toast(e.message, "err"));
   api("/api/deploy/logs").then((res) => {
     const el = document.getElementById("deploy-logs");
     if (!el) return;
@@ -702,6 +688,9 @@ function bindDeployTab() {
           <td>${l.status ? '<span class="tag ok">成功</span>' : '<span class="tag err">失败</span>'}</td>
           <td class="hint">${esc(l.message)}</td></tr>`).join("")}</tbody></table>`
       : "暂无记录";
+  }).catch((e) => {
+    const el = document.getElementById("deploy-logs");
+    if (el) el.textContent = `加载失败：${e.message}`;
   });
 }
 
@@ -779,40 +768,31 @@ function advancedTab(s) {
 }
 
 function bindAdvancedTab(s) {
-  const save = async (group, body) => {
-    try {
+  const save = (group, body, btnId) =>
+    runBusy(document.getElementById(btnId), async () => {
       await api("/api/settings", { method: "POST", body: { group, ...body } });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
   document.getElementById("save-adv1").onclick = () =>
-    save("abbrlink", { alg: document.getElementById("ad-alg").value, rep: document.getElementById("ad-rep").value });
+    save("abbrlink", { alg: document.getElementById("ad-alg").value, rep: document.getElementById("ad-rep").value }, "save-adv1");
   document.getElementById("ad-excerpt").addEventListener("change", () =>
-    save("excerpt", { config: document.getElementById("ad-excerpt").value }),
+    save("excerpt", { config: document.getElementById("ad-excerpt").value }, "save-adv1"),
   );
-  document.getElementById("save-adv2").onclick = () => save("cdn", { cdn: document.getElementById("ad-cdn").value });
-  document.getElementById("save-side").onclick = async () => {
-    try {
+  document.getElementById("save-adv2").onclick = () => save("cdn", { cdn: document.getElementById("ad-cdn").value }, "save-adv2");
+  document.getElementById("save-side").onclick = () =>
+    runBusy(document.getElementById("save-side"), async () => {
       await api("/api/settings", { method: "POST", body: { group: "sidebar", type: "post", content: document.getElementById("ad-post-side").value } });
       await api("/api/settings", { method: "POST", body: { group: "sidebar", type: "page", content: document.getElementById("ad-page-side").value } });
       toast("保存成功", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
   document.getElementById("save-onepush").onclick = () =>
-    save("onepush", { onepush: document.getElementById("ad-onepush").value });
-  document.getElementById("test-onepush").onclick = async () => {
-    try {
+    save("onepush", { onepush: document.getElementById("ad-onepush").value }, "save-onepush");
+  document.getElementById("test-onepush").onclick = () =>
+    runBusy(document.getElementById("test-onepush"), async () => {
       const res = await api("/api/test_onepush", { method: "POST", body: { onepush: document.getElementById("ad-onepush").value } });
       toast(res.msg || "已发送", "ok");
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "发送中…").catch((e) => toast(e.message, "err"));
 
   document.getElementById("add-custom").onclick = () =>
     openModal({
@@ -863,10 +843,14 @@ function bindAdvancedTab(s) {
   document.querySelectorAll("[data-del-custom]").forEach((btn) => {
     btn.onclick = async () => {
       if (!(await confirmDialog(`确定删除字段 ${btn.dataset.delCustom} 吗？`))) return;
-      await api("/api/custom", { method: "DELETE", body: { name: btn.dataset.delCustom } });
-      toast("删除成功", "ok");
-      await loadSettings(true);
-      routeSettingsRefresh();
+      try {
+        await runBusy(btn, () => api("/api/custom", { method: "DELETE", body: { name: btn.dataset.delCustom } }), "删除中…");
+        toast("删除成功", "ok");
+        await loadSettings(true);
+        routeSettingsRefresh();
+      } catch (e) {
+        toast(e.message, "err");
+      }
     };
   });
 
@@ -880,7 +864,7 @@ function bindAdvancedTab(s) {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        const res = await api("/api/import", { method: "POST", body: data });
+        const res = await runBusy(document.getElementById("import-btn"), () => api("/api/import", { method: "POST", body: data }), "导入中…");
         toast(res.msg || "导入完成", "ok");
         await loadSettings(true);
       } catch (e) {
@@ -891,36 +875,40 @@ function bindAdvancedTab(s) {
   };
   document.getElementById("purge").onclick = async () => {
     if (!(await confirmDialog("确定清除所有缓存吗？"))) return;
-    await api("/api/purge", { method: "POST", body: {} });
-    toast("缓存已清除", "ok");
-  };
-  document.getElementById("fix").onclick = async () => {
-    const res = await api("/api/fix", { method: "POST", body: {} });
-    toast(res.msg, "ok");
-    await loadSettings(true);
-  };
-  document.getElementById("check-update").onclick = async () => {
-    const box = document.getElementById("update-result");
     try {
-      const res = await api("/api/update/check");
-      box.innerHTML = res.hasNew
-        ? `发现上游新版本 <strong>${esc(res.latest)}</strong>（当前 ${esc(res.current)}）· <a href="${esc(res.url)}" target="_blank">查看</a>`
-        : `已是最新版本（当前 ${esc(res.current)}，上游 ${esc(res.latest || "unknown")}）`;
+      await runBusy(document.getElementById("purge"), () => api("/api/purge", { method: "POST", body: {} }), "清除中…");
+      toast("缓存已清除", "ok");
     } catch (e) {
-      box.textContent = e.message;
+      toast(e.message, "err");
     }
   };
-  document.getElementById("save-raw").onclick = async () => {
-    try {
+  document.getElementById("fix").onclick = () =>
+    runBusy(document.getElementById("fix"), async () => {
+      const res = await api("/api/fix", { method: "POST", body: {} });
+      toast(res.msg, "ok");
+      await loadSettings(true);
+    }, "修复中…").catch((e) => toast(e.message, "err"));
+  document.getElementById("check-update").onclick = () =>
+    runBusy(document.getElementById("check-update"), async () => {
+      const box = document.getElementById("update-result");
+      box.innerHTML = `<span class="spin" aria-hidden="true"></span> 正在检查更新…`;
+      try {
+        const res = await api("/api/update/check");
+        box.innerHTML = res.hasNew
+          ? `发现上游新版本 <strong>${esc(res.latest)}</strong>（当前 ${esc(res.current)}）· <a href="${esc(res.url)}" target="_blank">查看</a>`
+          : `已是最新版本（当前 ${esc(res.current)}，上游 ${esc(res.latest || "unknown")}）`;
+      } catch (e) {
+        box.textContent = e.message;
+      }
+    }, "检查中…");
+  document.getElementById("save-raw").onclick = () =>
+    runBusy(document.getElementById("save-raw"), async () => {
       const parsed = JSON.parse(document.getElementById("raw-settings").value);
       const settings = Object.entries(parsed).map(([name, content]) => ({ name, content: String(content) }));
       await api("/api/import", { method: "POST", body: { settings } });
       toast("保存成功", "ok");
       await loadSettings(true);
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 }
 
 function routeSettingsRefresh() {
@@ -1056,8 +1044,8 @@ async function renderAccount({ view }) {
         <li>生产环境建议通过 <code>wrangler secret put SESSION_SECRET</code> 固定会话密钥。</li>
       </ul>
     </div>`;
-  document.getElementById("save-account").onclick = async () => {
-    try {
+  document.getElementById("save-account").onclick = () =>
+    runBusy(document.getElementById("save-account"), async () => {
       await api("/api/settings/user", {
         method: "POST",
         body: {
@@ -1070,10 +1058,7 @@ async function renderAccount({ view }) {
       toast("已保存，请重新登录", "ok");
       location.hash = "#/login";
       location.reload();
-    } catch (e) {
-      toast(e.message, "err");
-    }
-  };
+    }, "保存中…").catch((e) => toast(e.message, "err"));
 }
 
 /* ------------------------------------------------------------------ */

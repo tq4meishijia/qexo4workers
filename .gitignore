@@ -6,3 +6,4 @@ test/.ego-state/
 test/out/
 *.log
 dist/
+release-notes.md

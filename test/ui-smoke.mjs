@@ -420,6 +420,13 @@ await step("ui: MCP 页面生成 Agent 配置提示词", async () => {
 await step("ui: 按钮组件规范与状态反馈", async () => {
   await page.goto(base + "/#/settings/provider", { waitUntil: "networkidle" });
   await page.waitForSelector("#save-provider");
+  // v1.7.0 起保存按钮提交期间进入加载态并禁用，完成后由 runBusy 恢复。
+  // 「按下 → 禁用态」两组断言共享同一次点击，拦截真实提交制造受控的
+  // busy 窗口，避免请求先于断言完成、按钮被恢复导致悬停采样竞态。
+  await page.route("**/api/settings/provider", async (route) => {
+    await new Promise((r) => setTimeout(r, 30000));
+    await route.continue().catch(() => {});
+  });
   const spec = await page.evaluate(() => {
     const cs = getComputedStyle(document.getElementById("save-provider"));
     const menu = document.getElementById("menu-toggle");
@@ -485,6 +492,7 @@ await step("ui: 按钮组件规范与状态反馈", async () => {
   await page.evaluate(() => window.QexoStyles.apply("midnight"));
   assert.equal(radii.midnight, "8px", radii.midnight);
   assert.equal(radii.eink, "0px", radii.eink);
+  await page.unroute("**/api/settings/provider");
   return `36/28px · 8px/0px 主题圆角 · 140/90ms 单一缓动 · 焦点/按下/禁用已覆盖`;
 });
 

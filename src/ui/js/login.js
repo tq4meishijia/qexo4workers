@@ -111,6 +111,7 @@ $("login-form").addEventListener("submit", async (event) => {
   clearError();
   const btn = $("login-btn");
   btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
   btn.textContent = "登录中…";
 
   try {
@@ -141,6 +142,7 @@ $("login-form").addEventListener("submit", async (event) => {
     showError(error.message || "登录失败");
     if (captchaVersion === "turnstile") resetTurnstile();
     btn.disabled = false;
+    btn.removeAttribute("aria-busy");
     btn.textContent = "登录";
   }
 });

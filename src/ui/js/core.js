@@ -93,6 +93,50 @@ export async function copyText(text) {
   }
 }
 
+/* ---------------- 交互反馈：按钮加载态 / 列表状态 ---------------- */
+
+/**
+ * 按钮加载态：禁用 + 旋转指示器 + aria-busy，可选替换文案（如「保存中…」）。
+ * 与文章列表行内反馈共用 .btn.is-loading 样式；恢复时还原原始内容。
+ */
+export function btnBusy(btn, busy, label = "") {
+  if (!btn) return;
+  if (busy) {
+    if (btn.disabled) return; // 已在处理中，忽略重复置忙
+    btn.dataset.busyHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    btn.setAttribute("aria-busy", "true");
+    btn.innerHTML = `<span class="spin" aria-hidden="true"></span>${esc(label || "处理中…")}`;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove("is-loading");
+    btn.removeAttribute("aria-busy");
+    if (btn.dataset.busyHtml !== undefined) {
+      btn.innerHTML = btn.dataset.busyHtml;
+      delete btn.dataset.busyHtml;
+    }
+  }
+}
+
+/** 包装一次异步动作：置忙 → 执行 → 恢复；错误交给调用方原有的 toast 路径。 */
+export async function runBusy(btn, fn, label = "") {
+  btnBusy(btn, true, label);
+  try {
+    return await fn();
+  } finally {
+    btnBusy(btn, false);
+  }
+}
+
+/** 列表容器的统一状态片段：加载中 / 加载失败；空态文案仍由各页面自定义。 */
+export const listStateHtml = {
+  loading: (text = "加载中…") =>
+    `<div class="empty is-loading"><span class="spin" aria-hidden="true"></span><span>${esc(text)}</span></div>`,
+  error: (msg) =>
+    `<div class="empty"><strong>加载失败</strong><p>${esc(msg || "请稍后重试")}</p></div>`,
+};
+
 /* ---------------- API ---------------- */
 
 export async function api(path, options = {}) {
@@ -167,11 +211,32 @@ export function openModal({ title = "提示", body = "", buttons = [{ label: "�
     btn.className = `btn ${b.cls || ""}`;
     btn.textContent = b.label;
     btn.onclick = async () => {
-      if (b.onClick) {
-        const keep = await b.onClick();
-        if (keep === false) return;
+      // 提交进行中直接忽略：disabled 只挡住真实点击，程序派发的
+      // dispatchEvent 仍会进入本回调，需在 JS 层再次拦截防重复提交。
+      if (btn.disabled) return;
+      // 弹窗动作提交期间锁定全部按钮：防重复提交，被点按钮进入加载态。
+      const footBtns = [...foot.querySelectorAll("button")];
+      footBtns.forEach((x) => (x.disabled = true));
+      const prevHtml = btn.innerHTML;
+      btn.classList.add("is-loading");
+      btn.setAttribute("aria-busy", "true");
+      btn.innerHTML = `<span class="spin" aria-hidden="true"></span>${esc(b.label)}`;
+      try {
+        if (b.onClick) {
+          const keep = await b.onClick();
+          if (keep === false) return;
+        }
+        closeModal();
+      } catch (e) {
+        // 回调未自行处理的异常在此统一反馈：弹窗保持打开，可直接重试。
+        toast(e?.message || String(e), "err");
+      } finally {
+        btn.innerHTML = prevHtml;
+        btn.classList.remove("is-loading");
+        btn.removeAttribute("aria-busy");
+        // 弹窗已关闭（foot 将随下次打开重建）时无需恢复；仍打开则解除锁定。
+        if (root.hidden === false) footBtns.forEach((x) => (x.disabled = false));
       }
-      closeModal();
     };
     foot.appendChild(btn);
   });

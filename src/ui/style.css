@@ -330,6 +330,9 @@ td.actions .btn { margin-left: 4px; }
 
 .empty { padding: 44px 20px; text-align: center; color: var(--muted); }
 .empty strong { display: block; color: var(--text-dim); margin-bottom: 6px; font-size: 14px; }
+/* 列表加载态：居中旋转指示器 + 文案，与空态共用 .empty 容器 */
+.empty.is-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 34px 20px; }
+.empty .spin { width: 14px; height: 14px; border-color: var(--spin-track); border-top-color: var(--accent-2); }
 
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border-soft); margin-bottom: 18px; flex-wrap: wrap; }
 .tab {
@@ -430,6 +433,8 @@ td.actions .btn { margin-left: 4px; }
 }
 .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--text-dim); }
 .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+/* 空态与加载态横跨整个图库网格 */
+.image-grid .empty { grid-column: 1 / -1; }
 .image-card { border: 1px solid var(--border-soft); border-radius: 10px; overflow: hidden; background: var(--panel); }
 .image-card .thumb { height: 120px; background: var(--editor-bg) center/cover no-repeat; }
 .image-card .meta { padding: 8px 10px; display: grid; gap: 4px; }
@@ -462,6 +467,10 @@ td.actions .btn { margin-left: 4px; }
 .toast.ok { border-color: var(--ok-border); }
 .toast.err { border-color: var(--danger-border); }
 .toast.warn { border-color: var(--warn-border); }
+/* 结果提示前置符号：成功/失败/警示一眼可辨；伪元素不影响 textContent 去重 */
+.toast.ok::before { content: "✓"; color: var(--ok-fg); font-weight: 600; margin-right: 4px; }
+.toast.err::before { content: "⚠"; color: var(--danger-fg); font-weight: 600; margin-right: 4px; }
+.toast.warn::before { content: "⚠"; color: var(--warn-fg); font-weight: 600; margin-right: 4px; }
 @keyframes slide { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------------- 文章状态切换反馈（发布 / 转草稿） ----------------

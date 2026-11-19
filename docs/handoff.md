@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目版本 | **1.6.1** |
+| 项目版本 | **1.7.0** |
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
@@ -361,4 +361,12 @@
 - **回归**：`test/e2e.mjs` 新增「重复删除幽灵索引（文件已不在仓库）幂等成功」。
 - **发布**：v1.6.0 → v1.6.1（PATCH），版本字段清单见 `CHANGELOG.md` 对应段；提交 `54fe907`，标签 `v1.6.1`，Release <https://github.com/tq4meishijia/qexo4workers/releases/tag/v1.6.1>，生产 Version ID `4276fb71-9c26-4dac-b293-bf31df315f34`。
 - **环境注记**：本地代理对 `*.workers.dev` 持续 502，线上 `appVersion` 的 curl 核验未成功；部署结论以 wrangler 输出为准。CI 因 checkout 时标签已存在而按门禁跳过，Release 由本地补建。
+
+## 19. v1.7.0 全站交互反馈层（2026-11-19）
+
+- **范围**：管理端全部页面与控件的加载中 / 成功 / 失败 / 禁用 / 空态 / 重复提交六类状态；交互逻辑与主题样式不变。完整清单见 `CHANGELOG.md` v1.7.0 段。
+- **基建**：`src/ui/js/core.js` 新增 `btnBusy()` / `runBusy()` / `listStateHtml`；`openModal` 提交期间锁定全部按钮 + 重入守卫（`dispatchEvent` 可穿透 disabled，需 JS 层拦截）+ 未捕获异常统一 toast。
+- **已知适配**：`test/ui-smoke.mjs` 的按钮规范测试拦截 `POST /api/settings/provider`（30s 受控 busy 窗口）以隔离「按下 → 禁用态」两组断言与 `runBusy` 恢复的竞态；统计摘要 / 部署记录此前失败会永久停留「加载中…」，已补失败态。
+- **回归**：新增 `test/feedback.mjs`（自带 harness，`node test/feedback.mjs`）8 项；基线 `npm test` 73 / `test:ui` 20 / `browser-qa` 49 / `status-fx` 9 / `turnstile` 12 / `tsc` / `deploy:dry` 全绿。
+- **发布**：v1.6.1 → v1.7.0（MINOR），生产 Version ID 见版本表；本地 `npm run deploy` 兜底 + 标签 `v1.7.0`。
 
