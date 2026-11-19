@@ -4,6 +4,16 @@
 
 版本字段集中在：`package.json`、`package-lock.json`（根与 `packages[""]`）、`src/store.ts` 的 `QEXO_VERSION`、README 徽章 / 版本表 / 页脚、`src/ui/js/mcp-prompt.js` 与 `mcp.js` 的回退值，以及 `test/e2e.mjs`、`test/prod-smoke.mjs`、`test/prod-ui.mjs` 的版本断言。
 
+## v1.6.1 — 2026-11-19（PATCH）
+
+**修复：删除「索引残留但仓库文件已不存在」的文章时报「文件不存在」**
+
+- 根因：`delete()` 直接调用 `provider.deleteFile()`，GitHub 实现先以 `shaOf()` 查 sha；仓库侧文件已不存在时抛 `HttpError(..., 404)`，前端弹出「文件不存在: source/_posts/…」。D1 `content_index` 的残留行让这篇文章仍显示在列表中（v1.5.1 已为发布 / 转草稿做同类幂等自愈，删除路径当时未覆盖）。
+- `delete()` 现在将 404 视为幂等成功：继续清理 D1 索引、失效缓存并触发部署；其他错误仍照常抛出。文章与页面删除共用该路径，一次覆盖两个入口。
+- 顺带移除删除方法内重复执行的同一条索引 `DELETE` 语句（原 `entry?.kind === "page"` 分支），行为不变。
+
+**验证**：新增 e2e「重复删除幽灵索引（文件已不在仓库）幂等成功」；`npm test` 73/73、`tsc --noEmit` 通过。
+
 ## v1.6.0 — 2026-11-17（MINOR）
 
 **新增：文章发布 / 转草稿的行内状态反馈动画**

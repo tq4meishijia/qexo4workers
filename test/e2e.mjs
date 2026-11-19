@@ -133,7 +133,7 @@ await step("auth: 登录并获取 CSRF", async () => {
   assert.ok(me.data.user?.username === "admin");
   assert.ok(me.data.csrf);
   assert.equal(me.data.default_admin, true, "default-password flag should be set");
-  assert.equal(me.data.version, "1.6.0", "runtime version mismatch");
+  assert.equal(me.data.version, "1.6.1", "runtime version mismatch");
   assert.equal(me.data.turnstile?.enabled, false, "Turnstile must stay disabled without operator secrets");
   api.csrf = me.data.csrf;
   csrf = me.data.csrf;
@@ -793,6 +793,16 @@ await step("posts: 删除后构建结果同步消失", async () => {
   assert.ok(fs.existsSync("test/out/public/posts/hello-world.html"));
 });
 
+await step("posts: 重复删除幽灵索引（文件已不在仓库）幂等成功", async () => {
+  // 第一次删除已把仓库文件与索引清空；再次删除模拟「索引残留但文件不存在」，
+  // 后端应吞掉 GitHub 404、继续清索引并返回成功，而不是报「文件不存在」。
+  const r = await api.post("/api/delete", { file: postPath });
+  assert.equal(r.data.status, true, JSON.stringify(r.data));
+  const list = await api.get("/api/posts");
+  assert.ok(!JSON.stringify(list.data).includes(postPath), "幽灵索引行未清理");
+  return "第二次删除返回成功且索引为空";
+});
+
 /* ---------------- MCP ---------------- */
 
 async function mcpRequest(payload, token) {
@@ -989,7 +999,7 @@ await step("mcp: Agent 配置提示词符合结构规范", async () => {
     scopes: ["read", "write"],
     tools,
     protocols: catalog.data.protocols,
-    appVersion: "1.6.0",
+    appVersion: "1.6.1",
   });
   assert.ok(prompt.startsWith("# Qexo MCP 接入配置"), prompt.slice(0, 60));
   let cursor = -1;

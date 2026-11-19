@@ -575,15 +575,15 @@ export class ContentService {
   }
 
   async delete(path: string): Promise<boolean> {
-    const entry = await this.env.DB.prepare("SELECT kind FROM content_index WHERE path = ?").bind(path).first<{
-      kind: string;
-    }>();
-    await this.provider.deleteFile(path, `Delete ${path} by Qexo`);
+    // D1 索引可能残留而仓库文件已被删除（大正文写入异常，或 GitHub 侧直接改删）。
+    // 这种情况删除应幂等成功：清掉索引即可，不应因仓库 404 报错阻断用户。
+    try {
+      await this.provider.deleteFile(path, `Delete ${path} by Qexo`);
+    } catch (e) {
+      if (!(e instanceof HttpError && e.status === 404)) throw e;
+    }
     await this.invalidate(path);
     await this.env.DB.prepare("DELETE FROM content_index WHERE path = ?").bind(path).run();
-    if (entry?.kind === "page") {
-      await this.env.DB.prepare("DELETE FROM content_index WHERE path = ?").bind(path).run();
-    }
     await this.maybeDeploy(`Delete ${path}`);
     return true;
   }
