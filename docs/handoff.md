@@ -8,7 +8,7 @@
 | 交接日期 | 2026-11-14 |
 | 代码仓库 | <https://github.com/tq4meishijia/qexo4workers> |
 | 示例地址 | `https://qexo.example.com`（真实部署地址不入库；测试时用 `QEXO_BASE_URL` 指定） |
-| 当前 Worker 版本 | `6da1f4ae-5bac-4185-8207-8d37521eeded` |
+| 当前 Worker 版本 | `b17921ea-3de9-4af5-b5ef-07944a263fd3`（v1.7.0，2026-11-19） |
 | 云账号 | `tq4meishijia@gmail.com`（Account ID `92d3a579…`） |
 | 许可证 | GPL-3.0-or-later（上游 Qexo 衍生作品） |
 
