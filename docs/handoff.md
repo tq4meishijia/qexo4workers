@@ -354,3 +354,11 @@
 - **已知边界**：`prefers-reduced-motion` 下关闭位移动画；状态列 `aria-live="polite"` 逐行播报，未额外引入全局播报区。
 - **发布**：推送 `f5d7de8` 后，流水线 run #3 判定正确（`版本 1.5.1 → 1.6.0，且 v1.6.0 未发布，执行发布`），但在「检查部署凭据」步骤因缺少 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 中止，未产生标签或半成品部署——这是门禁与凭据检查按设计的表现。随后本地兜底完成发布：`npm run deploy`（`Current Version ID` `794efa8f-e2ce-4305-90f4-6da0fc289038`，线上 `appVersion = "1.6.0"`）、推送附注标签 `v1.6.0`（`40b50de`）、`gh release create` 创建 Release。配置两个 Secrets 后，下一次版本变更将由流水线自动完成全链路。
 
+## 18. v1.6.1 删除幽灵索引幂等修复（2026-11-19）
+
+- **问题**：生产后台删除 `qexo-for-workers-recommendation` 报「文件不存在: source/_posts/…」。D1 `content_index` 残留行使文章仍显示在列表，但仓库文件已被此前发布流程删除。
+- **根因与修复**：`src/content.ts:577` 的 `delete()` 直接调用 `provider.deleteFile()`；`src/vcs.ts` 的 GitHub 实现以 `shaOf()` 查不到 sha 即抛 `HttpError(404)`。现改为捕获 404 视为幂等成功，继续清索引、失效缓存、触发部署，其他错误照常抛出；原冗余重复 DELETE 分支已移除。v1.5.1 已覆盖 publish/unpublish，本次补齐 delete 路径。
+- **回归**：`test/e2e.mjs` 新增「重复删除幽灵索引（文件已不在仓库）幂等成功」。
+- **发布**：v1.6.0 → v1.6.1（PATCH），版本字段清单见 `CHANGELOG.md` 对应段；提交 `54fe907`，标签 `v1.6.1`，Release <https://github.com/tq4meishijia/qexo4workers/releases/tag/v1.6.1>，生产 Version ID `4276fb71-9c26-4dac-b293-bf31df315f34`。
+- **环境注记**：本地代理对 `*.workers.dev` 持续 502，线上 `appVersion` 的 curl 核验未成功；部署结论以 wrangler 输出为准。CI 因 checkout 时标签已存在而按门禁跳过，Release 由本地补建。
+
